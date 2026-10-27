@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Commercial Resilience Simulator</title>
+  <style>
+    :root {
+      --ink: #202b32;
+      --muted: #687780;
+      --paper: #f5f4ef;
+      --panel: #ffffff;
+      --line: #dce1df;
+      --accent: #a56c36;
+      --accent-dark: #805027;
+      --green: #376b55;
+      --red: #a3473f;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 1.55;
+    }
+
+    header {
+      background: #202b32;
+      color: white;
+      padding: 22px 6%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: .02em;
+    }
+
+    .brand span {
+      display: block;
+      color: #d8b48a;
+      font-size: 12px;
+      font-weight: 400;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .header-note {
+      color: #d5dcdf;
+      font-size: 13px;
+    }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 34px 22px 70px;
+    }
+
+    .eyebrow {
+      color: var(--accent-dark);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+
+    h1, h2, h3 { line-height: 1.2; }
+    h1 { font-size: clamp(30px, 4vw, 43px); margin: 8px 0 14px; }
+    h2 { font-size: 23px; margin-top: 0; }
+    h3 { font-size: 17px; margin-top: 0; }
+
+    p { margin-top: 0; }
+    .muted { color: var(--muted); }
+    .small { font-size: 13px; }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 20px;
+      min-width: 0;
+    }
+
+    .hero {
+      background: #e9e5da;
+      border: 1px solid #d9d1c0;
+      border-radius: 16px;
+      padding: clamp(24px, 5vw, 48px);
+      margin-bottom: 24px;
+    }
+
+    .hero p {
+      max-width: 760px;
+      color: #46545b;
+      font-size: 16px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .two-column {
+      display: grid;
+      grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr);
+      gap: 20px;
+      align-items: start;
+    }
+
+    .supplier {
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      padding: 17px;
+      background: #fff;
+    }
+
+    .supplier .country {
+      color: var(--accent-dark);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-weight: 700;
+    }
+
+    .supplier h3 { margin: 7px 0; }
+
+    .pill {
+      display: inline-block;
+      border-radius: 20px;
+      padding: 4px 10px;
+      background: #eee8dd;
+      color: #694d2f;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .round-track {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin: 20px 0;
+    }
+
+    .round-step {
+      padding: 12px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .round-step.active {
+      border-color: var(--accent);
+      box-shadow: inset 0 3px var(--accent);
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    .round-step.done {
+      background: #e6efe9;
+      border-color: #b9d1c3;
+      color: #285b42;
+    }
+
+    label {
+      display: block;
+      font-weight: 700;
+      margin: 14px 0 7px;
+    }
+
+    textarea, input {
+      width: 100%;
+      border: 1px solid #cbd3d3;
+      border-radius: 8px;
+      padding: 13px;
+      font: inherit;
+      background: white;
+      color: var(--ink);
+    }
+
+    textarea {
+      min-height: 190px;
+      resize: vertical;
+    }
+
+    textarea:focus, input:focus {
+      outline: 2px solid #d9b58c;
+      border-color: var(--accent);
+    }
+
+    button {
+      border: 0;
+      border-radius: 7px;
+      padding: 12px 18px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--accent);
+      color: white;
+    }
+
+    button:hover { background: var(--accent-dark); }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+
+    button.secondary {
+      background: #e9ecea;
+      color: var(--ink);
+      border: 1px solid var(--line);
+    }
+
+    button.secondary:hover { background: #dce2df; }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+
+    .notice {
+      padding: 13px 15px;
+      border-radius: 8px;
+      background: #f5efe4;
+      border-left: 4px solid var(--accent);
+      margin: 15px 0;
+      font-size: 14px;
+    }
+
+    .notice.error {
+      background: #f8e9e7;
+      border-color: var(--red);
+      color: #792f29;
+    }
+
+    .notice.success {
+      background: #e8f1eb;
+      border-color: var(--green);
+    }
+
+    .status-list {
+      padding-left: 20px;
+      margin-bottom: 0;
+    }
+
+    .status-list li { margin: 8px 0; }
+
+    .development {
+      border-left: 3px solid var(--accent);
+      padding: 4px 0 4px 16px;
+      margin: 18px 0;
+    }
+
+    .development + .development { margin-top: 22px; }
+
+    .hidden { display: none !important; }
+
+    .fact-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    .footer-note {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 20px;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font: inherit;
+    }
+
+    @media (max-width: 760px) {
+      main { padding: 22px 14px 45px; }
+      .grid, .two-column { grid-template-columns: 1fr; }
+      .panel { padding: 18px; }
+      .round-track { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      header { padding: 18px 5%; }
+    }
+
+  header button.secondary {
+  background: transparent;
+  color: white;
+  border: 1px solid #718087;
+  white-space: nowrap;
+}
+
+  header button.secondary:hover {
+  background: #36444c;
+}
+  </style>
+</head>
+<body>
+  <header>
+  <div style="display:flex; align-items:center; gap:18px;">
+    <button id="home-button" class="secondary" type="button">
+      ← Home
+    </button>
+    <div class="brand">
+      Commercial Resilience Simulator
+      <span>Practise decisions under pressure</span>
+    </div>
+  </div>
+  <div class="header-note">Proof of concept · Fictional scenario</div>
+</header>
+
+  <main>
+    <div id="notice" class="notice hidden" role="status"></div>
+
+    <section id="loading-screen" class="panel">
+      <p>Loading scenario...</p>
+    </section>
+
+    <section id="intro-screen" class="hidden">
+      <div class="hero">
+        <div class="eyebrow">Supply chain resilience · Scenario 01</div>
+        <h1 id="scenario-title">Clothing Supply Chain Crisis</h1>
+        <p id="scenario-description"></p>
+        <div class="actions">
+          <button id="start-button">Begin simulation</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Your objective</h2>
+        <p id="scenario-objective"></p>
+        <div class="notice">
+          This is a fictional training exercise. Events and figures presented during
+          the simulation are illustrative, not verified market data. Treat
+          unconfirmed reports as unverified until evidence is available.
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Supply chain overview</h2>
+        <p class="muted">Review the supplier landscape before making your first decision.</p>
+        <div id="supplier-grid" class="grid"></div>
+      </div>
+    </section>
+
+    <section id="simulation-screen" class="hidden">
+      <div class="eyebrow">Live exercise</div>
+      <h1 id="active-title">Clothing Supply Chain Crisis</h1>
+      <p id="active-context" class="muted"></p>
+
+      <div id="round-track" class="round-track"></div>
+
+      <div class="two-column">
+        <div>
+          <div class="panel">
+            <span id="round-number" class="pill">Round 1 of 4</span>
+            <h2 id="round-title" style="margin-top: 15px;"></h2>
+            <p id="round-event"></p>
+            <h3>Your task</h3>
+            <p id="round-objective"></p>
+          </div>
+
+          <div class="panel">
+            <h2>Your decision</h2>
+            <p class="muted">
+              Explain what you would do, what information you need, who you would
+              involve and why. You can acknowledge uncertainty rather than guessing.
+            </p>
+            <label for="decision-input">What is your response to the situation?</label>
+            <textarea id="decision-input" placeholder="Set out your recommended actions, the reasons for them, the information you need and the risks you would monitor..."></textarea>
+            <div class="actions">
+              <button id="submit-decision">Submit decision</button>
+            </div>
+            <p class="footer-note">Your decision will be sent to the simulator for a scenario response.</p>
+          </div>
+
+          <div id="development-panel" class="panel hidden">
+            <h2>Development and feedback</h2>
+            <div id="development-content"></div>
+            <div class="actions">
+              <button id="continue-button">Continue to next round</button>
+              <button id="review-button" class="hidden">Complete exercise and review</button>
+            </div>
+          </div>
+        </div>
+
+        <aside>
+          <div class="panel">
+            <h3>Situation tracker</h3>
+            <p class="small muted">Keep evidence and uncertainty separate.</p>
+
+            <div class="development">
+              <div class="fact-label">Known facts</div>
+              <ul id="facts-list" class="status-list"></ul>
+            </div>
+
+            <div class="development">
+              <div class="fact-label">Unknowns to investigate</div>
+              <ul id="unknowns-list" class="status-list"></ul>
+            </div>
+
+            <div class="development">
+              <div class="fact-label">Your decisions so far</div>
+              <ol id="decision-history" class="status-list"></ol>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h3>Suppliers</h3>
+            <div id="active-suppliers"></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="review-screen" class="hidden">
+      <div class="hero">
+        <div class="eyebrow">Exercise complete</div>
+        <h1>After-action review</h1>
+        <p>Review the reasoning behind your decisions and the trade-offs they created.</p>
+      </div>
+
+      <div class="panel">
+        <h2>Review and coaching</h2>
+        <div id="review-content"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Decision history</h2>
+        <div id="final-history"></div>
+      </div>
+
+      <div class="actions">
+        <button id="restart-button" class="secondary">Restart exercise</button>
+      </div>
+    </section>
+  </main>
+
+<script>
+(() => {
+  "use strict";
+
+  const API_BASE = "/api";
+  const $ = (id) => document.getElementById(id);
+
+  let scenario = null;
+  let sessionId = null;
+  let currentRound = 1;
+  let sessionData = null;
+  let busy = false;
+
+  function showNotice(message, type = "") {
+    const notice = $("notice");
+    notice.textContent = message;
+    notice.className = "notice" + (type ? " " + type : "");
+    notice.classList.remove("hidden");
+  }
+
+  function hideNotice() {
+    $("notice").classList.add("hidden");
+  }
+
+  function showScreen(screenId) {
+    [
+      "loading-screen",
+      "intro-screen",
+      "simulation-screen",
+      "review-screen"
+    ].forEach(id => $(id).classList.add("hidden"));
+
+    $(screenId).classList.remove("hidden");
+    hideNotice();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function api(path, options = {}) {
+    const response = await fetch(API_BASE + path, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers || {})
+      }
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(data.error || data.message || `Request failed (${response.status})`);
+    }
+
+    return data;
+  }
+
+  function safeText(value, fallback = "Not provided") {
+    return typeof value === "string" && value.trim()
+      ? value
+      : fallback;
+  }
+
+  function addListItems(listElement, items) {
+    listElement.replaceChildren();
+
+    (Array.isArray(items) ? items : []).forEach(item => {
+      const li = document.createElement("li");
+      li.textContent = typeof item === "string" ? item : JSON.stringify(item);
+      listElement.appendChild(li);
+    });
+
+    if (!listElement.children.length) {
+      const li = document.createElement("li");
+      li.textContent = "No information recorded yet.";
+      listElement.appendChild(li);
+    }
+  }
+
+  function renderSuppliers(container, suppliers) {
+    container.replaceChildren();
+
+    (suppliers || []).forEach(supplier => {
+      const card = document.createElement("div");
+      card.className = "supplier";
+
+      const country = document.createElement("div");
+      country.className = "country";
+      country.textContent = safeText(supplier.country);
+
+      const title = document.createElement("h3");
+      title.textContent = safeText(supplier.name);
+
+      const role = document.createElement("p");
+      role.textContent = safeText(supplier.role);
+
+      const capacity = document.createElement("p");
+      capacity.innerHTML = "<strong>Capacity:</strong> ";
+      capacity.append(document.createTextNode(safeText(supplier.capacity)));
+
+      const leadTime = document.createElement("p");
+      leadTime.innerHTML = "<strong>Lead time:</strong> ";
+      leadTime.append(document.createTextNode(safeText(supplier.leadTime)));
+
+      card.append(country, title, role, capacity, leadTime);
+      container.appendChild(card);
+    });
+  }
+
+  function renderIntro() {
+    $("scenario-title").textContent = scenario.title;
+    $("scenario-description").textContent = scenario.description;
+    $("scenario-objective").textContent = scenario.objective;
+
+    renderSuppliers(
+      $("supplier-grid"),
+      scenario.supplyChain?.suppliers || []
+    );
+
+    showScreen("intro-screen");
+  }
+
+  function renderRoundTrack() {
+    const track = $("round-track");
+    track.replaceChildren();
+
+    (scenario.rounds || []).forEach(round => {
+      const step = document.createElement("div");
+      step.className = "round-step";
+
+      if (round.number === currentRound) step.classList.add("active");
+      if (round.number < currentRound) step.classList.add("done");
+
+      step.textContent = `Round ${round.number}: ${round.title}`;
+      track.appendChild(step);
+    });
+  }
+
+  function renderHistory() {
+    const history = sessionData?.decisions || [];
+
+    addListItems(
+      $("decision-history"),
+      history.map(item =>
+        `Round ${item.round}: ${item.decision}`
+      )
+    );
+
+    const finalHistory = $("final-history");
+    finalHistory.replaceChildren();
+
+    history.forEach(item => {
+      const article = document.createElement("div");
+      article.className = "development";
+
+      const title = document.createElement("h3");
+      title.textContent = `Round ${item.round}`;
+
+      const decision = document.createElement("p");
+      decision.textContent = item.decision;
+
+      article.append(title, decision);
+
+      if (item.response) {
+        const response = document.createElement("p");
+        response.textContent = item.response;
+        article.appendChild(response);
+      }
+
+      finalHistory.appendChild(article);
+    });
+  }
+
+  function renderCurrentRound() {
+    const round = (scenario.rounds || []).find(r => r.number === currentRound);
+
+    if (!round) {
+      showNotice("The next round could not be found.", "error");
+      return;
+    }
+
+    $("active-title").textContent = scenario.title;
+    $("active-context").textContent = scenario.context || "";
+    $("round-number").textContent = `Round ${currentRound} of ${scenario.rounds.length}`;
+    $("round-title").textContent = round.title;
+    $("round-event").textContent = round.event;
+    $("round-objective").textContent = round.objective;
+
+    const crisis = scenario.initialCrisis || {};
+    addListItems($("facts-list"), crisis.knownFacts || []);
+    addListItems($("unknowns-list"), crisis.unknowns || []);
+
+    renderRoundTrack();
+    renderHistory();
+    renderSuppliers(
+      $("active-suppliers"),
+      scenario.supplyChain?.suppliers || []
+    );
+
+    $("decision-input").value = "";
+    $("development-panel").classList.add("hidden");
+    $("submit-decision").disabled = false;
+    $("continue-button").classList.remove("hidden");
+    $("review-button").classList.add("hidden");
+
+    showScreen("simulation-screen");
+  }
+
+  function renderResponse(result) {
+    const container = $("development-content");
+    container.replaceChildren();
+
+    const responseText =
+      result.development ||
+      result.response ||
+      result.message ||
+      result.feedback ||
+      "Your decision has been recorded.";
+
+    const development = document.createElement("div");
+    development.className = "development";
+
+    const heading = document.createElement("h3");
+    heading.textContent = "What happens next";
+
+    const paragraph = document.createElement("p");
+    paragraph.textContent = typeof responseText === "string"
+      ? responseText
+      : JSON.stringify(responseText, null, 2);
+
+    development.append(heading, paragraph);
+    container.appendChild(development);
+
+    if (result.feedback) {
+      const feedback = document.createElement("div");
+      feedback.className = "development";
+
+      const feedbackHeading = document.createElement("h3");
+      feedbackHeading.textContent = "Decision feedback";
+
+      const feedbackText = document.createElement("p");
+      feedbackText.textContent = typeof result.feedback === "string"
+        ? result.feedback
+        : JSON.stringify(result.feedback, null, 2);
+
+      feedback.append(feedbackHeading, feedbackText);
+      container.appendChild(feedback);
+    }
+
+    $("development-panel").classList.remove("hidden");
+
+    const isLastRound = currentRound >= scenario.rounds.length;
+    $("continue-button").classList.toggle("hidden", isLastRound);
+    $("review-button").classList.toggle("hidden", !isLastRound);
+  }
+
+  async function startSimulation() {
+    if (busy) return;
+    busy = true;
+    $("start-button").disabled = true;
+    hideNotice();
+
+    try {
+      // This payload must match the new sessions.js start route.
+      const result = await api("/sessions", {
+        method: "POST",
+        body: JSON.stringify({ scenarioId: scenario.id })
+      });
+
+      sessionId = result.id || result.sessionId || result.session?.id;
+      sessionData = result.session || result;
+
+      if (!sessionId) {
+        throw new Error("The server did not return a session ID. Check the start-session API response.");
+      }
+
+      currentRound = sessionData.currentRound || 1;
+      renderCurrentRound();
+    } catch (error) {
+      showNotice(`Could not start the simulation: ${error.message}`, "error");
+    } finally {
+      busy = false;
+      $("start-button").disabled = false;
+    }
+  }
+
+  async function submitDecision() {
+    if (busy || !sessionId) return;
+
+    const decision = $("decision-input").value.trim();
+
+    if (decision.length < 10) {
+      showNotice("Please provide a little more detail so the simulator can assess your decision.", "error");
+      return;
+    }
+
+    busy = true;
+    $("submit-decision").disabled = true;
+    hideNotice();
+    showNotice("Processing your decision...", "");
+
+    try {
+      // The server should run the round and return the development and updated session.
+      const result = await api(`/sessions/${encodeURIComponent(sessionId)}/messages`, {
+        method: "POST",
+        body: JSON.stringify({
+          message: decision,
+          decision,
+          round: currentRound
+        })
+      });
+
+      sessionData = result.session || sessionData;
+
+      if (Array.isArray(sessionData?.decisions)) {
+        renderHistory();
+      }
+
+      renderResponse(result);
+      hideNotice();
+    } catch (error) {
+      showNotice(
+        `Your decision could not be processed: ${error.message}. The current backend may still use a different response format.`,
+        "error"
+      );
+    } finally {
+      busy = false;
+      $("submit-decision").disabled = false;
+    }
+  }
+
+  async function continueRound() {
+    if (busy) return;
+
+    currentRound += 1;
+
+    if (currentRound > scenario.rounds.length) {
+      currentRound = scenario.rounds.length;
+      await completeReview();
+      return;
+    }
+
+    renderCurrentRound();
+  }
+
+  async function completeReview() {
+    if (busy || !sessionId) return;
+    busy = true;
+    $("review-button").disabled = true;
+    hideNotice();
+    showNotice("Preparing your after-action review...", "");
+
+    try {
+      const result = await api(`/sessions/${encodeURIComponent(sessionId)}/debrief`, {
+        method: "POST",
+        body: JSON.stringify({})
+      });
+
+      const review = result.debrief || result.review || result;
+      const container = $("review-content");
+      container.replaceChildren();
+
+      if (typeof review === "string") {
+        const paragraph = document.createElement("p");
+        paragraph.textContent = review;
+        container.appendChild(paragraph);
+      } else {
+        Object.entries(review || {}).forEach(([key, value]) => {
+          if (key === "id" || key === "sessionId") return;
+
+          const section = document.createElement("div");
+          section.className = "development";
+
+          const heading = document.createElement("h3");
+          heading.textContent = key
+            .replace(/([A-Z])/g, " $1")
+            .replace(/[_-]/g, " ")
+            .replace(/^./, character => character.toUpperCase());
+
+          const body = document.createElement("pre");
+          body.textContent = typeof value === "string"
+            ? value
+            : JSON.stringify(value, null, 2);
+
+          section.append(heading, body);
+          container.appendChild(section);
+        });
+      }
+
+      renderHistory();
+      showScreen("review-screen");
+    } catch (error) {
+      showNotice(`Could not generate the review: ${error.message}`, "error");
+    } finally {
+      busy = false;
+      $("review-button").disabled = false;
+    }
+  }
+
+  async function loadScenario() {
+    try {
+      const scenarios = await api("/scenarios");
+
+      if (!Array.isArray(scenarios) || scenarios.length === 0) {
+        throw new Error("The scenario endpoint returned no scenarios.");
+      }
+
+      scenario = scenarios.find(item => Number(item.id) === 1) || scenarios[0];
+
+      if (!Array.isArray(scenario.rounds) || scenario.rounds.length !== 4) {
+        throw new Error("The scenario must contain all four rounds.");
+      }
+
+      renderIntro();
+    } catch (error) {
+      $("loading-screen").innerHTML = "";
+      const heading = document.createElement("h2");
+      heading.textContent = "Unable to load the scenario";
+      const paragraph = document.createElement("p");
+      paragraph.textContent = error.message;
+      $("loading-screen").append(heading, paragraph);
+      showNotice(
+        "Check that the server is running and that /api/scenarios returns the scenario JSON.",
+        "error"
+      );
+    }
+  }
+
+
+$("home-button").addEventListener("click", () => {
+  if (
+    sessionId &&
+    !$("simulation-screen").classList.contains("hidden")
+  ) {
+    const confirmed = window.confirm(
+      "Return to the scenario overview? Your current exercise may be left unfinished, but your saved session will not be deleted."
+    );
+
+    if (!confirmed) return;
+  }
+
+  renderIntro();
+});
+
+  $("start-button").addEventListener("click", startSimulation);
+  $("submit-decision").addEventListener("click", submitDecision);
+  $("continue-button").addEventListener("click", continueRound);
+  $("review-button").addEventListener("click", completeReview);
+
+  $("restart-button").addEventListener("click", () => {
+    sessionId = null;
+    sessionData = null;
+    currentRound = 1;
+    renderIntro();
+  });
+
+  loadScenario();
+})();
+</script>
+</body>
+</html>
