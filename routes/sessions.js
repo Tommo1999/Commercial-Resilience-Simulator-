@@ -337,15 +337,30 @@ Rules:
 }
 `;
 
-        const response = await anthropic.messages.create({
-            model: MODEL,
-            max_tokens: 1100,
-            system: systemPrompt,
-            messages: [{ role: "user", content: "Process the decision and return the JSON development." }]
-        });
+    const response = await anthropic.messages.create({
+    model: MODEL,
+    max_tokens: 1800,
+    system: systemPrompt,
+    messages: [{
+        role: "user",
+        content: "Process the decision and return the required JSON development. Keep every field concise, limit each array to two items, and return one complete, valid JSON object. Do not add Markdown or commentary."
+    }]
+});
 
-        await recordUsage(response, "simulation", session);
-        const generated = parseClaudeJson(getText(response));
+console.log("[SIMULATION] Stop reason:", response.stop_reason);
+console.log("[SIMULATION] Output tokens:", response.usage?.output_tokens);
+
+await recordUsage(response, "simulation", session);
+
+const rawText = getText(response);
+
+try {
+    var generated = parseClaudeJson(rawText);
+} catch (parseError) {
+    console.error("[SIMULATION] JSON parsing failed:", parseError.message);
+    console.error("[SIMULATION] Raw response ending:", rawText.slice(-1000));
+    throw parseError;
+}
 
         const development = {
             round,
