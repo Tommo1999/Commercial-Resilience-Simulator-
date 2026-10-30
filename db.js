@@ -11,9 +11,12 @@ async function connectDB() {
 
     await client.connect();
 
-    db = client.db("off-book");
+    db = client.db("commercial-resilience-simulator");
 
-    console.log("MongoDB connected");
+  console.log(
+    "MongoDB connected to database:",
+    db.databaseName
+);
 
     return db;
 }

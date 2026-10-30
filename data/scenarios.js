@@ -6,7 +6,7 @@ const scenarios = [
         difficulty: "Medium",
 
         description:
-            "A UK-based clothing business relies on manufacturers in Turkey, Vietnam and India. A severe storm has disrupted production at its Vietnamese supplier. The procurement team must investigate the impact, assess alternatives and recommend actions as the situation develops over four rounds.",
+            "Northstar Clothing Ltd are a UK-based clothing business that relies on manufacturers in Turkey, Vietnam and India. A severe storm has disrupted production at its Vietnamese supplier. The procurement team must investigate the impact, assess alternatives and recommend actions as the situation develops over four rounds.",
 
         objective:
             "Maintain business continuity while balancing cost, supplier capacity, delivery commitments, compliance and reputational risk. Investigate uncertain information, explain assumptions and make justified recommendations.",

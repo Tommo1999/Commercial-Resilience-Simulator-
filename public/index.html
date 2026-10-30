@@ -94,7 +94,7 @@
       background: #e9e5da;
       border: 1px solid #d9d1c0;
       border-radius: 16px;
-      padding: clamp(24px, 5vw, 48px);
+      padding: clamp(24px, 5vw, 24px);
       margin-bottom: 24px;
     }
 
@@ -211,7 +211,13 @@
     }
 
     button:hover { background: var(--accent-dark); }
-    button:disabled { opacity: .55; cursor: not-allowed; }
+    button:disabled {
+      background: #9aa1a4;
+      color: #f7f8f8;
+      opacity: 1;
+      cursor: not-allowed;
+    }
+    button:disabled:hover { background: #9aa1a4; }
 
     button.secondary {
       background: #e9ecea;
@@ -303,14 +309,24 @@
   header button.secondary:hover {
   background: #36444c;
 }
+  
+    .review-section { margin-bottom: 1.5rem; }
+    .review-section h3 { margin-bottom: .65rem; }
+    .review-subsection, .review-field { margin: .8rem 0; }
+    .review-subsection h4, .review-field h4 { margin: .5rem 0; }
+    .review-list { padding-left: 1.4rem; margin: .5rem 0 1rem; }
+    .review-list li { margin: .45rem 0; line-height: 1.6; }
+    #review-content p { line-height: 1.65; }
+    .review-heading-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    .review-heading-row h2 { margin-bottom: 16px; }
+    @media (max-width: 600px) { .review-heading-row { align-items: stretch; } .review-heading-row button { width: 100%; } }
+
   </style>
 </head>
 <body>
   <header>
-  <div style="display:flex; align-items:center; gap:18px;">
-    <button id="home-button" class="secondary" type="button">
-      ← Home
-    </button>
+  <div style="display:flex; align-items:center; gap:18px; flex-wrap:wrap;">
+    <button id="home-button" class="secondary" type="button" style="display:none;">← Home</button>
     <div class="brand">
       Commercial Resilience Simulator
       <span>Practise decisions under pressure</span>
@@ -320,8 +336,6 @@
 </header>
 
   <main>
-    <div id="notice" class="notice hidden" role="status"></div>
-
     <section id="loading-screen" class="panel">
       <p>Loading scenario...</p>
     </section>
@@ -331,8 +345,8 @@
         <div class="eyebrow">Supply chain resilience · Scenario 01</div>
         <h1 id="scenario-title">Clothing Supply Chain Crisis</h1>
         <p id="scenario-description"></p>
-        <div class="actions">
-          <button id="start-button">Begin simulation</button>
+      <div class="actions">
+  <button id="start-button">Begin simulation</button>
         </div>
       </div>
 
@@ -353,10 +367,34 @@
       </div>
     </section>
 
+<!-- Simulation Library screen -->
+    <section id="library-screen" class="hidden">
+      <div class="hero">
+                <h1>Simulation Library</h1>
+        <p>
+          Browse saved scenarios and explore alternative supply-chain
+          resilience exercises.
+        </p>
+      </div>
+
+      <div class="panel">
+        <h2>Available simulations</h2>
+        <p class="muted">
+          Choose a simulation to view its objectives and begin the exercise.
+        </p>
+        <div id="library-list"></div>
+      </div>
+    </section>
+
     <section id="simulation-screen" class="hidden">
       <div class="eyebrow">Live exercise</div>
       <h1 id="active-title">Clothing Supply Chain Crisis</h1>
       <p id="active-context" class="muted"></p>
+
+      <div class="panel">
+        <h2>Suppliers</h2>
+        <div id="active-suppliers" class="grid"></div>
+      </div>
 
       <div id="round-track" class="round-track"></div>
 
@@ -379,18 +417,12 @@
             <label for="decision-input">What is your response to the situation?</label>
             <textarea id="decision-input" placeholder="Set out your recommended actions, the reasons for them, the information you need and the risks you would monitor..."></textarea>
             <div class="actions">
-              <button id="submit-decision">Submit decision</button>
+              <button id="submit-decision" type="button">Submit decision</button>
+              <button id="continue-button" class="hidden" type="button">Continue to next round</button>
+              <button id="review-button" class="hidden" type="button">Generate after-action review</button>
             </div>
-            <p class="footer-note">Your decision will be sent to the simulator for a scenario response.</p>
-          </div>
-
-          <div id="development-panel" class="panel hidden">
-            <h2>Development and feedback</h2>
-            <div id="development-content"></div>
-            <div class="actions">
-              <button id="continue-button">Continue to next round</button>
-              <button id="review-button" class="hidden">Complete exercise and review</button>
-            </div>
+            <div id="decision-status" class="notice hidden" role="status" aria-live="polite"></div>
+            <div id="review-loading" class="notice hidden" role="status" aria-live="polite">Preparing your after-action review...</div>
           </div>
         </div>
 
@@ -415,10 +447,6 @@
             </div>
           </div>
 
-          <div class="panel">
-            <h3>Suppliers</h3>
-            <div id="active-suppliers"></div>
-          </div>
         </aside>
       </div>
     </section>
@@ -431,7 +459,10 @@
       </div>
 
       <div class="panel">
-        <h2>Review and coaching</h2>
+        <div class="review-heading-row">
+          <h2>Review and coaching</h2>
+          <button id="download-review-button" type="button" class="secondary">Download review as Word document</button>
+        </div>
         <div id="review-content"></div>
       </div>
 
@@ -444,6 +475,8 @@
         <button id="restart-button" class="secondary">Restart exercise</button>
       </div>
     </section>
+
+    <div id="notice" class="notice hidden" role="status" aria-live="polite"></div>
   </main>
 
 <script>
@@ -470,15 +503,29 @@
     $("notice").classList.add("hidden");
   }
 
+  function showDecisionStatus(message, type = "") {
+    const status = $("decision-status");
+    status.textContent = message;
+    status.className = "notice" + (type ? " " + type : "");
+    status.classList.remove("hidden");
+  }
+
+  function hideDecisionStatus() {
+    $("decision-status").classList.add("hidden");
+  }
+
   function showScreen(screenId) {
     [
       "loading-screen",
       "intro-screen",
+      "library-screen",
       "simulation-screen",
       "review-screen"
     ].forEach(id => $(id).classList.add("hidden"));
 
     $(screenId).classList.remove("hidden");
+    // Keep Home hidden on the Simulation Library itself, and show it on other screens.
+    $("home-button").style.display = screenId === "library-screen" ? "none" : "inline-block";
     hideNotice();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -566,6 +613,83 @@
     showScreen("intro-screen");
   }
 
+  async function loadLibrary() {
+    const container = $("library-list");
+    container.replaceChildren();
+    showScreen("library-screen");
+
+    // Built-in simulation: keep this connected to the existing four-round engine.
+    if (scenario) {
+      const card = document.createElement("article");
+      card.className = "supplier";
+      card.style.marginBottom = "12px";
+
+      const heading = document.createElement("h3");
+      heading.textContent = scenario.title || "Clothing Supply Chain Crisis";
+
+      const description = document.createElement("p");
+      description.textContent = scenario.description || "A supply-chain resilience exercise.";
+
+      const tags = document.createElement("p");
+      tags.className = "muted small";
+      tags.textContent = "Supply chain · Supplier management · Risk and compliance";
+
+      const actions = document.createElement("div");
+      actions.className = "actions";
+      const openButton = document.createElement("button");
+      openButton.type = "button";
+      openButton.textContent = "View simulation";
+      openButton.addEventListener("click", renderIntro);
+
+      actions.appendChild(openButton);
+      card.append(heading, description, tags, actions);
+      container.appendChild(card);
+    }
+
+    const comingSoon = document.createElement("article");
+    comingSoon.className = "supplier";
+    comingSoon.style.marginBottom = "12px";
+    const comingSoonHeading = document.createElement("h3");
+    comingSoonHeading.textContent = "More simulations coming soon";
+    const comingSoonText = document.createElement("p");
+    comingSoonText.className = "muted";
+    comingSoonText.textContent = "New simulations can be added here as the library grows.";
+    comingSoon.append(comingSoonHeading, comingSoonText);
+    container.appendChild(comingSoon);
+
+    // Community-saved records are displayed as additional entries for now.
+    try {
+      const items = await api("/library");
+      if (!Array.isArray(items) || items.length === 0) return;
+
+      const communityHeading = document.createElement("h2");
+      communityHeading.textContent = "Simulation scenarios";
+      communityHeading.style.marginTop = "24px";
+      container.appendChild(communityHeading);
+
+      items.forEach(item => {
+        const card = document.createElement("article");
+        card.className = "supplier";
+        card.style.marginBottom = "12px";
+
+        const heading = document.createElement("h3");
+        heading.textContent = item.title || item.name || "Untitled scenario";
+
+        const description = document.createElement("p");
+        description.textContent = item.description || item.summary || "No description provided.";
+
+        card.append(heading, description);
+        container.appendChild(card);
+      });
+    } catch (error) {
+      const message = document.createElement("p");
+      message.className = "muted";
+      message.textContent = `Simulation scenarios could not be loaded: ${error.message}`;
+      container.appendChild(message);
+    }
+  }
+
+
   function renderRoundTrack() {
     const track = $("round-track");
     track.replaceChildren();
@@ -583,12 +707,17 @@
   }
 
   function renderHistory() {
-    const history = sessionData?.decisions || [];
+    const history = Array.isArray(sessionData?.decisions)
+      ? sessionData.decisions
+      : [];
+
+    const getDecisionText = (item) =>
+      item?.message || item?.decision || item?.participantDecision || "";
 
     addListItems(
       $("decision-history"),
       history.map(item =>
-        `Round ${item.round}: ${item.decision}`
+        `Round ${item.round ?? "?"}: ${getDecisionText(item) || "Decision text unavailable"}`
       )
     );
 
@@ -600,16 +729,17 @@
       article.className = "development";
 
       const title = document.createElement("h3");
-      title.textContent = `Round ${item.round}`;
+      title.textContent = `Round ${item.round ?? "?"}`;
 
       const decision = document.createElement("p");
-      decision.textContent = item.decision;
+      decision.textContent = getDecisionText(item) || "Decision text unavailable";
 
       article.append(title, decision);
 
-      if (item.response) {
+      const responseText = item.response || item.development;
+      if (responseText) {
         const response = document.createElement("p");
-        response.textContent = item.response;
+        response.textContent = responseText;
         article.appendChild(response);
       }
 
@@ -644,60 +774,29 @@
     );
 
     $("decision-input").value = "";
-    $("development-panel").classList.add("hidden");
+    $("continue-button").classList.add("hidden");
+    $("review-button").classList.add("hidden");
+    $("review-loading").classList.add("hidden");
+    hideDecisionStatus();
+    $("submit-decision").textContent = "Submit decision";
     $("submit-decision").disabled = false;
+    $("continue-button").disabled = true;
     $("continue-button").classList.remove("hidden");
+    $("review-button").disabled = true;
     $("review-button").classList.add("hidden");
 
     showScreen("simulation-screen");
   }
 
-  function renderResponse(result) {
-    const container = $("development-content");
-    container.replaceChildren();
-
-    const responseText =
-      result.development ||
-      result.response ||
-      result.message ||
-      result.feedback ||
-      "Your decision has been recorded.";
-
-    const development = document.createElement("div");
-    development.className = "development";
-
-    const heading = document.createElement("h3");
-    heading.textContent = "What happens next";
-
-    const paragraph = document.createElement("p");
-    paragraph.textContent = typeof responseText === "string"
-      ? responseText
-      : JSON.stringify(responseText, null, 2);
-
-    development.append(heading, paragraph);
-    container.appendChild(development);
-
-    if (result.feedback) {
-      const feedback = document.createElement("div");
-      feedback.className = "development";
-
-      const feedbackHeading = document.createElement("h3");
-      feedbackHeading.textContent = "Decision feedback";
-
-      const feedbackText = document.createElement("p");
-      feedbackText.textContent = typeof result.feedback === "string"
-        ? result.feedback
-        : JSON.stringify(result.feedback, null, 2);
-
-      feedback.append(feedbackHeading, feedbackText);
-      container.appendChild(feedback);
-    }
-
-    $("development-panel").classList.remove("hidden");
-
+  function renderResponse() {
+    // Keep the saved confirmation and the next action together in the decision panel.
+    // No separate development/feedback panel is needed because rounds do not call Claude.
     const isLastRound = currentRound >= scenario.rounds.length;
+    // Moving on is only allowed after this round's decision has been saved.
     $("continue-button").classList.toggle("hidden", isLastRound);
+    $("continue-button").disabled = true;
     $("review-button").classList.toggle("hidden", !isLastRound);
+    $("review-button").disabled = true;
   }
 
   async function startSimulation() {
@@ -731,22 +830,23 @@
   }
 
   async function submitDecision() {
-    if (busy || !sessionId) return;
+    if (busy || !sessionId || $("submit-decision").disabled) return;
 
     const decision = $("decision-input").value.trim();
 
     if (decision.length < 10) {
-      showNotice("Please provide a little more detail so the simulator can assess your decision.", "error");
+      showDecisionStatus("Please provide a little more detail before submitting your decision.", "error");
       return;
     }
 
     busy = true;
-    $("submit-decision").disabled = true;
+    const submitButton = $("submit-decision");
+    submitButton.disabled = true;
+    submitButton.textContent = "Saving…";
     hideNotice();
-    showNotice("Processing your decision...", "");
+    showDecisionStatus("Saving your decision… No AI response is generated during the rounds.");
 
     try {
-      // The server should run the round and return the development and updated session.
       const result = await api(`/sessions/${encodeURIComponent(sessionId)}/messages`, {
         method: "POST",
         body: JSON.stringify({
@@ -756,22 +856,48 @@
         })
       });
 
-      sessionData = result.session || sessionData;
-
-      if (Array.isArray(sessionData?.decisions)) {
-        renderHistory();
+      // The backend saves this decision without making a Claude API call.
+      const returnedSession = result.session || result;
+      if (returnedSession && typeof returnedSession === "object" &&
+          (Array.isArray(returnedSession.decisions) || returnedSession.id || returnedSession.currentRound)) {
+        sessionData = { ...(sessionData || {}), ...returnedSession };
       }
 
-      renderResponse(result);
-      hideNotice();
+      // The simulator API stores the participant's text in item.message.
+      // Only add a local fallback if the server did not return this decision,
+      // and check both supported field names to prevent duplicate entries.
+      if (!Array.isArray(sessionData?.decisions)) {
+        sessionData = { ...(sessionData || {}), decisions: [] };
+      }
+      const alreadyRecorded = sessionData.decisions.some(item =>
+        Number(item.round) === Number(currentRound) &&
+        (item.message === decision || item.decision === decision ||
+         item.participantDecision === decision)
+      );
+      if (!alreadyRecorded) {
+        sessionData.decisions.push({ round: currentRound, message: decision });
+      }
+
+      renderHistory();
+      renderResponse();
+      submitButton.textContent = "Decision saved";
+      submitButton.disabled = true;
+      const isLastRound = currentRound >= scenario.rounds.length;
+      $("continue-button").disabled = isLastRound;
+      $("review-button").disabled = !isLastRound;
+      showDecisionStatus("Decision saved successfully. You can now continue to the next round; all four decisions will be reviewed together at the end.", "success");
     } catch (error) {
-      showNotice(
-        `Your decision could not be processed: ${error.message}. The current backend may still use a different response format.`,
+      submitButton.textContent = "Submit decision";
+      submitButton.disabled = false;
+      const timeoutLike = /timeout|503|failed to fetch|network/i.test(error.message);
+      showDecisionStatus(
+        timeoutLike
+          ? `We couldn't confirm receipt of your decision (${error.message}). The server may still have processed it. Check the session before retrying to avoid submitting it twice.`
+          : `Your decision was not confirmed: ${error.message}`,
         "error"
       );
     } finally {
       busy = false;
-      $("submit-decision").disabled = false;
     }
   }
 
@@ -794,7 +920,7 @@
     busy = true;
     $("review-button").disabled = true;
     hideNotice();
-    showNotice("Preparing your after-action review...", "");
+    $("review-loading").classList.remove("hidden");
 
     try {
       const result = await api(`/sessions/${encodeURIComponent(sessionId)}/debrief`, {
@@ -802,9 +928,71 @@
         body: JSON.stringify({})
       });
 
-      const review = result.debrief || result.review || result;
+      let review = result.debrief || result.review || result;
+      // Some model responses arrive as a JSON-encoded string. Parse them so
+      // the review can be displayed as normal page content, not code.
+      if (typeof review === "string") {
+        const trimmed = review.trim();
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+          try { review = JSON.parse(trimmed); } catch (_) { /* keep plain text */ }
+        }
+      }
+
       const container = $("review-content");
       container.replaceChildren();
+
+      const prettyLabel = key => String(key)
+        .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+        .replace(/[_-]/g, " ")
+        .replace(/^./, character => character.toUpperCase());
+
+      function appendReviewValue(parent, value, key) {
+        if (value === null || value === undefined || value === "") return;
+
+        if (Array.isArray(value)) {
+          if (value.every(item => typeof item !== "object" || item === null)) {
+            const list = document.createElement("ul");
+            list.className = "review-list";
+            value.forEach(item => {
+              const li = document.createElement("li");
+              li.textContent = String(item);
+              list.appendChild(li);
+            });
+            parent.appendChild(list);
+          } else {
+            value.forEach((item, index) => {
+              const subsection = document.createElement("section");
+              subsection.className = "review-subsection";
+              const heading = document.createElement("h4");
+              heading.textContent = item && typeof item === "object" && item.round
+                ? `Round ${item.round}`
+                : `${prettyLabel(key || "Item")} ${index + 1}`;
+              subsection.appendChild(heading);
+              appendReviewValue(subsection, item, key);
+              parent.appendChild(subsection);
+            });
+          }
+          return;
+        }
+
+        if (typeof value === "object") {
+          Object.entries(value).forEach(([childKey, childValue]) => {
+            if (["id", "sessionId", "round"].includes(childKey)) return;
+            const subsection = document.createElement("div");
+            subsection.className = "review-field";
+            const heading = document.createElement("h4");
+            heading.textContent = prettyLabel(childKey);
+            subsection.appendChild(heading);
+            appendReviewValue(subsection, childValue, childKey);
+            if (subsection.childNodes.length > 1) parent.appendChild(subsection);
+          });
+          return;
+        }
+
+        const paragraph = document.createElement("p");
+        paragraph.textContent = String(value);
+        parent.appendChild(paragraph);
+      }
 
       if (typeof review === "string") {
         const paragraph = document.createElement("p");
@@ -812,35 +1000,74 @@
         container.appendChild(paragraph);
       } else {
         Object.entries(review || {}).forEach(([key, value]) => {
-          if (key === "id" || key === "sessionId") return;
-
-          const section = document.createElement("div");
-          section.className = "development";
-
+          if (["id", "sessionId"].includes(key)) return;
+          const section = document.createElement("section");
+          section.className = "development review-section";
           const heading = document.createElement("h3");
-          heading.textContent = key
-            .replace(/([A-Z])/g, " $1")
-            .replace(/[_-]/g, " ")
-            .replace(/^./, character => character.toUpperCase());
-
-          const body = document.createElement("pre");
-          body.textContent = typeof value === "string"
-            ? value
-            : JSON.stringify(value, null, 2);
-
-          section.append(heading, body);
-          container.appendChild(section);
+          heading.textContent = prettyLabel(key);
+          section.appendChild(heading);
+          appendReviewValue(section, value, key);
+          if (section.childNodes.length > 1) container.appendChild(section);
         });
       }
 
       renderHistory();
+      $("review-loading").classList.add("hidden");
       showScreen("review-screen");
     } catch (error) {
+      $("review-loading").classList.add("hidden");
       showNotice(`Could not generate the review: ${error.message}`, "error");
     } finally {
+      $("review-loading").classList.add("hidden");
       busy = false;
       $("review-button").disabled = false;
     }
+  }
+
+  function downloadReviewAsWord() {
+    const reviewContent = $("review-content");
+    if (!reviewContent || !reviewContent.children.length) {
+      showNotice("Generate the after-action review before downloading it.", "error");
+      return;
+    }
+
+    const scenarioTitle = scenario?.title || "Commercial Resilience Simulation";
+    const safeTitle = String(scenarioTitle).replace(/[\\/:*?"<>|]+/g, "-").trim() || "Simulation Review";
+    const decisionHistory = $("final-history")?.innerHTML || "";
+    const exportHtml = `
+      <!DOCTYPE html>
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+      <head><meta charset="utf-8"><title>After-action review</title>
+      <style>
+        body { font-family: Arial, sans-serif; color: #202b32; font-size: 11pt; line-height: 1.5; }
+        h1 { font-size: 22pt; color: #202b32; } h2 { font-size: 16pt; color: #805027; }
+        h3 { font-size: 13pt; color: #202b32; } h4 { font-size: 11pt; color: #805027; }
+        p, li { margin-bottom: 6pt; } ul, ol { margin-top: 4pt; }
+        .development, .review-section, .review-subsection, .review-field { margin-bottom: 12pt; }
+      </style></head><body>
+        <h1>After-action review</h1>
+        <p><strong>Scenario:</strong> ${escapeWordHtml(scenarioTitle)}</p>
+        <p><strong>Date:</strong> ${new Date().toLocaleDateString("en-GB")}</p>
+        ${reviewContent.innerHTML}
+        <h2>Decision history</h2>
+        ${decisionHistory}
+      </body></html>`;
+
+    const blob = new Blob(["\ufeff", exportHtml], { type: "application/msword;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${safeTitle} - After-action review.doc`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function escapeWordHtml(value) {
+    return String(value).replace(/[&<>"']/g, character => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    })[character]);
   }
 
   async function loadScenario() {
@@ -857,7 +1084,7 @@
         throw new Error("The scenario must contain all four rounds.");
       }
 
-      renderIntro();
+      await loadLibrary();
     } catch (error) {
       $("loading-screen").innerHTML = "";
       const heading = document.createElement("h2");
@@ -873,25 +1100,22 @@
   }
 
 
-$("home-button").addEventListener("click", () => {
-  if (
-    sessionId &&
-    !$("simulation-screen").classList.contains("hidden")
-  ) {
-    const confirmed = window.confirm(
-      "Return to the scenario overview? Your current exercise may be left unfinished, but your saved session will not be deleted."
-    );
-
-    if (!confirmed) return;
-  }
-
-  renderIntro();
-});
+  $("home-button").addEventListener("click", async () => {
+    // Confirm before leaving an active exercise, so the user does not navigate away accidentally.
+    if (sessionId && !$("simulation-screen").classList.contains("hidden")) {
+      const confirmed = window.confirm(
+        "Return to the Simulation Library? Your current exercise may be left unfinished, but your saved session will not be deleted."
+      );
+      if (!confirmed) return;
+    }
+    await loadLibrary();
+  });
 
   $("start-button").addEventListener("click", startSimulation);
   $("submit-decision").addEventListener("click", submitDecision);
   $("continue-button").addEventListener("click", continueRound);
   $("review-button").addEventListener("click", completeReview);
+  $("download-review-button").addEventListener("click", downloadReviewAsWord);
 
   $("restart-button").addEventListener("click", () => {
     sessionId = null;
