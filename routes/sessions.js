@@ -246,8 +246,7 @@ router.post("/", async (req, res) => {
 });
 
 // -----------------------------------------------------------------------------
-// Save one participant decision for the current round. No Claude call is made
-// here; the four saved decisions are reviewed together at the end.
+// Submit one decision for the current round and generate a bounded development
 // POST /api/sessions/:sessionId/messages { message: "..." }
 // -----------------------------------------------------------------------------
 
@@ -273,24 +272,133 @@ router.post("/:sessionId/messages", async (req, res) => {
         const roundConfig = session.scenario.rounds.find(item => item.number === round);
         if (!roundConfig) return res.status(500).json({ error: "Current round configuration is missing." });
 
-        // Prevent accidental duplicate submissions for a round.
-        if (session.decisions.some(item => Number(item.round) === Number(round))) {
-            return res.status(409).json({ error: "A decision has already been saved for this round." });
-        }
-
-        const timestamp = new Date().toISOString();
-        session.decisions.push({
+        const decision = {
             round,
             roundTitle: roundConfig.title,
             message,
-            timestamp
+            timestamp: new Date().toISOString()
+        };
+        session.decisions.push(decision);
+        session.messages.push({
+            sender: "user",
+            message,
+            round,
+            timestamp: decision.timestamp
         });
-        session.messages.push({ sender: "user", message, round, timestamp });
+
+        const systemPrompt = `
+You are the scenario engine for a fictional procurement and supply-chain resilience training simulation.
+You are NOT a supplier negotiator and must not turn this into a commercial negotiation.
+
+SCENARIO:
+${JSON.stringify({
+    title: session.scenario.title,
+    context: session.scenario.context,
+    supplyChain: session.scenario.supplyChain,
+    initialCrisis: session.scenario.initialCrisis,
+    rounds: session.scenario.rounds
+}, null, 2)}
+
+CURRENT ROUND: ${round} of ${TOTAL_ROUNDS}
+ROUND OBJECTIVE: ${roundConfig.objective}
+CURRENT EVENT: ${JSON.stringify(session.currentEvent)}
+CURRENT SIMULATION STATE: ${JSON.stringify(session.state)}
+KNOWN FACTS SO FAR: ${JSON.stringify(session.facts)}
+PARTICIPANT ASSUMPTIONS SO FAR: ${JSON.stringify(session.assumptions)}
+PREVIOUS DECISIONS: ${JSON.stringify(session.decisions.slice(0, -1))}
+NEW DECISION: ${message}
+
+Rules:
+- Generate a plausible consequence/development that responds to the participant's decision and the scenario state.
+- Keep the underlying scenario facts consistent across rounds. Do not invent real-world research, real companies, real statistics, or external events.
+- Use fictional, illustrative details only. If you introduce a new detail, label it as a simulated event or assumption, not a verified fact.
+- Distinguish facts, assumptions and simulated events explicitly.
+- Do not decide on behalf of the participant. Present consequences, trade-offs and the next decision challenge.
+- Decisions should have consequences: strong evidence gathering can reduce uncertainty; premature commitments can create cost, capacity or compliance exposure; reasonable alternatives can still have drawbacks.
+- Avoid punishing a reasonable decision just because it differs from one preferred answer.
+- Do not guarantee supplier capacity, recovery dates or legal conclusions unless the scenario has established them.
+- Round 3 allegations are initially unverified. Never state allegations are proven without simulated evidence explicitly establishing that.
+- Do not introduce a new crisis unrelated to the scenario.
+- Be concise but useful. Use British English.
+- Return valid JSON only, with this exact shape:
+{
+  "development": "2-4 sentence description of what happens because of the decision",
+  "consequences": ["consequence 1", "consequence 2"],
+  "newFacts": ["facts confirmed within this fictional simulation, if any"],
+  "assumptions": ["assumptions the participant made or that remain untested"],
+  "simulatedEvents": ["clearly labelled simulated developments"],
+  "stateUpdates": {
+    "inventoryStatus": "current best-known status",
+    "supplierCapacity": "current best-known status",
+    "continuityPlan": "current best-known status",
+    "complianceStatus": "current best-known status"
+  },
+  "nextChallenge": "the next round's challenge, or the final leadership decision if this was round 4"
+}
+`;
+
+        const response = await anthropic.messages.create({
+            model: MODEL,
+            max_tokens: 1100,
+            system: systemPrompt,
+            messages: [{ role: "user", content: "Process the decision and return the JSON development." }]
+        });
+
+        await recordUsage(response, "simulation", session);
+        const generated = parseClaudeJson(getText(response));
+
+        const development = {
+            round,
+            title: roundConfig.title,
+            participantDecision: message,
+            development: String(generated.development || "The decision has been recorded."),
+            consequences: Array.isArray(generated.consequences) ? generated.consequences : [],
+            newFacts: Array.isArray(generated.newFacts) ? generated.newFacts : [],
+            assumptions: Array.isArray(generated.assumptions) ? generated.assumptions : [],
+            simulatedEvents: Array.isArray(generated.simulatedEvents) ? generated.simulatedEvents : [],
+            timestamp: new Date().toISOString()
+        };
+
+        session.developments.push(development);
+        session.messages.push({
+            sender: "simulation",
+            message: development.development,
+            round,
+            timestamp: development.timestamp
+        });
+
+        session.facts = [...new Set([
+            ...(session.facts || []),
+            ...development.newFacts
+        ])];
+        session.assumptions = [...new Set([
+            ...(session.assumptions || []),
+            ...development.assumptions
+        ])];
+        session.simulatedEvents = [
+            ...(session.simulatedEvents || []),
+            ...development.simulatedEvents.map(event => ({
+                round,
+                description: event,
+                label: "Simulated event"
+            }))
+        ];
+
+        const updates = generated.stateUpdates || {};
+        session.state = {
+            ...(session.state || {}),
+            ...Object.fromEntries(
+                ["inventoryStatus", "supplierCapacity", "continuityPlan", "complianceStatus"]
+                    .filter(key => typeof updates[key] === "string")
+                    .map(key => [key, updates[key]])
+            ),
+            lastDevelopment: development.development,
+            nextChallenge: String(generated.nextChallenge || "")
+        };
 
         if (round >= TOTAL_ROUNDS) {
             session.status = "ready_for_review";
             session.currentEvent = null;
-            session.currentRound = TOTAL_ROUNDS;
         } else {
             const nextRound = round + 1;
             const nextConfig = session.scenario.rounds.find(item => item.number === nextRound);
@@ -299,7 +407,9 @@ router.post("/:sessionId/messages", async (req, res) => {
                 round: nextRound,
                 title: nextConfig.title,
                 description: nextConfig.event,
-                objective: nextConfig.objective
+                objective: nextConfig.objective,
+                contextualDevelopment: development.development,
+                challenge: String(generated.nextChallenge || "")
             };
         }
 
@@ -307,12 +417,13 @@ router.post("/:sessionId/messages", async (req, res) => {
 
         return res.json({
             ...publicSession(session),
-            savedDecision: { round, roundTitle: roundConfig.title, message, timestamp },
-            message: "Decision saved. No AI processing was performed for this round."
+            latestDevelopment: development
         });
     } catch (error) {
-        console.error("Failed to save simulation decision:", error);
-        return res.status(500).json({ error: "The decision could not be saved. Please try again." });
+        console.error("Simulation decision failed:", error);
+        return res.status(500).json({
+            error: "The simulation could not process that decision. Please try again."
+        });
     }
 });
 
@@ -321,87 +432,29 @@ router.post("/:sessionId/messages", async (req, res) => {
 // POST /api/sessions/:sessionId/debrief
 // -----------------------------------------------------------------------------
 
-router.post("/:sessionId/debrief", async (req, res) => {
-    try {
-        const session = await loadSession(req.params.sessionId);
-        if (!session) return res.status(404).json({ error: "Session not found." });
+// Prevent duplicate debrief generations within this running process.
+const debriefJobs = new Set();
 
-        const decisions = Array.isArray(session.decisions) ? session.decisions : [];
-        const completedRounds = new Set(decisions.map(item => Number(item.round)));
-        if (TOTAL_ROUNDS !== completedRounds.size ||
-            ![1, 2, 3, 4].every(round => completedRounds.has(round))) {
-            return res.status(400).json({
-                error: "Please save a decision for each of the four rounds before generating the after-action review.",
-                completedRounds: [...completedRounds].sort((a, b) => a - b)
-            });
-        }
-        if (session.debrief) return res.json({ sessionId: session.id, debrief: session.debrief });
+async function generateDebriefInBackground(sessionId) {
+    if (debriefJobs.has(sessionId)) return;
+    debriefJobs.add(sessionId);
+
+    try {
+        const session = await loadSession(sessionId);
+        if (!session || session.debrief) return;
+
+        session.debriefStatus = "generating";
+        session.debriefError = null;
+        await saveSession(session);
 
         const response = await anthropic.messages.create({
             model: MODEL,
-            max_tokens: 2400,
-            output_config: {
-                format: {
-                    type: "json_schema",
-                    schema: {
-                        type: "object",
-                        properties: {
-                            overallSummary: { type: "string" },
-                            overallRating: { type: "string", enum: ["Strong", "Effective", "Developing", "Needs improvement"] },
-                            strengths: { type: "array", items: { type: "string" } },
-                            improvements: { type: "array", items: { type: "string" } },
-                            roundReviews: {
-                                type: "array",
-                                items: {
-                                    type: "object",
-                                    properties: {
-                                        round: { type: "integer", enum: [1, 2, 3, 4] },
-                                        decisionSummary: { type: "string" },
-                                        whatWorked: { type: "array", items: { type: "string" } },
-                                        whatToConsider: { type: "array", items: { type: "string" } }
-                                    },
-                                    required: ["round", "decisionSummary", "whatWorked", "whatToConsider"],
-                                    additionalProperties: false
-                                }
-                            },
-                            evidenceAndAssumptions: {
-                                type: "object",
-                                properties: {
-                                    factsUsedWell: { type: "array", items: { type: "string" } },
-                                    assumptionsToTest: { type: "array", items: { type: "string" } },
-                                    informationToSeek: { type: "array", items: { type: "string" } }
-                                },
-                                required: ["factsUsedWell", "assumptionsToTest", "informationToSeek"],
-                                additionalProperties: false
-                            },
-                            stakeholderManagement: { type: "array", items: { type: "string" } },
-                            resilienceRecommendations: { type: "array", items: { type: "string" } },
-                            caveat: { type: "string" }
-                        },
-                        required: ["overallSummary", "overallRating", "strengths", "improvements", "roundReviews", "evidenceAndAssumptions", "stakeholderManagement", "resilienceRecommendations", "caveat"],
-                        additionalProperties: false
-                    }
-                }
-            },
+            max_tokens: 1600,
             system: `
 You are an experienced supply-chain resilience facilitator reviewing a fictional training simulation.
 Assess the quality of the participant's reasoning and process, not whether they guessed a single correct answer.
 Be balanced, specific, constructive and use British English. Do not invent actions the participant did not take.
-
-ROUND REVIEW PRESENTATION — IMPORTANT:
-- For each round's "whatWorked" field, include only actions or reasoning the participant actually demonstrated that were constructive or useful.
-- If the participant did nothing useful in a round, or there is no genuine positive point to report, set "whatWorked" to ["Nothing to report."] rather than an empty array, a dash, or a vague compliment.
-- Never use "-", "—", "None", or an empty string as a placeholder in "whatWorked".
-- Do not invent strengths just to populate this section.
-
-SCENARIO ACCURACY — IMPORTANT:
-- Treat the supplied original scenario and briefing details as authoritative.
-- Do not invent company, supplier, customer, product, order, contract, deadline or quantity details.
-- Do not invent consequences or events: this simulation records decisions only and does not generate live AI developments during the rounds.
-- Base each round review on the participant's actual saved decision and the round objective/event supplied in the scenario.
-- Clearly distinguish original scenario facts from participant assumptions and information gaps.
-- If a detail cannot be verified from the supplied scenario, identify it as something to check rather than an established fact.
-- Review all four rounds together and explain how the participant's approach develops across them.
+Clearly distinguish scenario facts from assumptions and simulated events.
 Return valid JSON only with this shape:
 {
   "overallSummary": "short balanced summary",
@@ -433,13 +486,11 @@ Return valid JSON only with this shape:
                         title: session.scenario.title,
                         objective: session.scenario.objective,
                         context: session.scenario.context,
-                        supplyChain: session.scenario.supplyChain,
-                        initialCrisis: session.scenario.initialCrisis,
-                        rounds: session.scenario.rounds
+                        supplyChain: session.scenario.supplyChain
                     },
-                    decisions: decisions.sort((a, b) => Number(a.round) - Number(b.round)),
-                    reviewGuidance: "Review the four saved participant decisions as one complete exercise. No AI-generated round developments exist; do not imply that consequences were simulated or observed.",
-                    initialState: session.state,
+                    decisions: session.decisions,
+                    developments: session.developments,
+                    currentState: session.state,
                     facts: session.facts,
                     assumptions: session.assumptions,
                     simulatedEvents: session.simulatedEvents
@@ -448,34 +499,77 @@ Return valid JSON only with this shape:
         });
 
         await recordUsage(response, "debrief", session);
-        const reviewText = getText(response);
-        if (response.stop_reason === "max_tokens") {
-            throw new Error("Claude's review output was truncated at the token limit; increase max_tokens or shorten the requested review.");
-        }
-        session.debrief = parseClaudeJson(reviewText);
-
-        // Ensure an empty or placeholder What Worked section is displayed clearly.
-        if (Array.isArray(session.debrief.roundReviews)) {
-            session.debrief.roundReviews.forEach(roundReview => {
-                const points = Array.isArray(roundReview.whatWorked)
-                    ? roundReview.whatWorked
-                        .map(point => String(point ?? "").trim())
-                        .filter(point => point && !["-", "—", "–", "none", "n/a"].includes(point.toLowerCase()))
-                    : [];
-
-                roundReview.whatWorked = points.length ? points : ["Nothing to report."];
-            });
-        }
-
+        session.debrief = parseClaudeJson(getText(response));
         session.status = "completed";
+        session.debriefStatus = "completed";
+        session.debriefError = null;
         session.completedAt = new Date().toISOString();
-
         await saveSession(session);
-
-        return res.json({ sessionId: session.id, debrief: session.debrief });
+        console.log(`[DEBRIEF] Completed and saved for session ${sessionId}`);
     } catch (error) {
         console.error("Failed to generate after-action review:", error);
-        return res.status(500).json({ error: "Failed to generate the after-action review." });
+        try {
+            const session = await loadSession(sessionId);
+            if (session && !session.debrief) {
+                session.debriefStatus = "failed";
+                session.debriefError = "The review could not be generated. Please retry.";
+                await saveSession(session);
+            }
+        } catch (saveError) {
+            console.error("Failed to save debrief error status:", saveError);
+        }
+    } finally {
+        debriefJobs.delete(sessionId);
+    }
+}
+
+// Start generation and return immediately, before Heroku's 30-second request timeout.
+router.post("/:sessionId/debrief", async (req, res) => {
+    try {
+        const session = await loadSession(req.params.sessionId);
+        if (!session) return res.status(404).json({ error: "Session not found." });
+        if (!session.decisions?.length) {
+            return res.status(400).json({ error: "There are no decisions to review yet." });
+        }
+        if (session.debrief) {
+            return res.json({ sessionId: session.id, status: "completed", debrief: session.debrief });
+        }
+        if (session.debriefStatus === "generating" || debriefJobs.has(session.id)) {
+            return res.status(202).json({ sessionId: session.id, status: "generating" });
+        }
+
+        session.debriefStatus = "generating";
+        session.debriefError = null;
+        await saveSession(session);
+
+        // Do not await the Claude request here.
+        setImmediate(() => generateDebriefInBackground(session.id));
+        return res.status(202).json({ sessionId: session.id, status: "generating" });
+    } catch (error) {
+        console.error("Failed to start after-action review:", error);
+        return res.status(500).json({ error: "Failed to start the after-action review." });
+    }
+});
+
+// Poll this endpoint while the review is being generated.
+router.get("/:sessionId/debrief", async (req, res) => {
+    try {
+        const session = await loadSession(req.params.sessionId);
+        if (!session) return res.status(404).json({ error: "Session not found." });
+        if (session.debrief) {
+            return res.json({ sessionId: session.id, status: "completed", debrief: session.debrief });
+        }
+        if (session.debriefStatus === "failed") {
+            return res.status(500).json({
+                sessionId: session.id,
+                status: "failed",
+                error: session.debriefError || "The review could not be generated."
+            });
+        }
+        return res.status(202).json({ sessionId: session.id, status: "generating" });
+    } catch (error) {
+        console.error("Failed to check after-action review:", error);
+        return res.status(500).json({ error: "Failed to check the after-action review." });
     }
 });
 
