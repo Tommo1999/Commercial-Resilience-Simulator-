@@ -337,7 +337,7 @@ Rules:
 }
 `;
 
-    const response = await anthropic.messages.create({
+   let response = await anthropic.messages.create({
     model: MODEL,
     max_tokens: 1800,
     system: systemPrompt,
@@ -352,14 +352,46 @@ console.log("[SIMULATION] Output tokens:", response.usage?.output_tokens);
 
 await recordUsage(response, "simulation", session);
 
-const rawText = getText(response);
+let rawText = getText(response);
+let generated;
 
 try {
-    var generated = parseClaudeJson(rawText);
+    generated = parseClaudeJson(rawText);
 } catch (parseError) {
-    console.error("[SIMULATION] JSON parsing failed:", parseError.message);
-    console.error("[SIMULATION] Raw response ending:", rawText.slice(-1000));
-    throw parseError;
+    console.warn(
+        "[SIMULATION] Invalid JSON. Retrying once:",
+        parseError.message
+    );
+
+    response = await anthropic.messages.create({
+        model: MODEL,
+        max_tokens: 1800,
+        system: systemPrompt,
+        messages: [
+            {
+                role: "user",
+                content: "Process the decision and return the required JSON development."
+            },
+            {
+                role: "assistant",
+                content: rawText
+            },
+            {
+                role: "user",
+                content: `Your previous response was not valid JSON. Correct the response and return one complete, valid JSON object matching the required schema exactly. In particular, ensure stateUpdates is a JSON object enclosed in { }, not an array enclosed in [ ]. Do not add Markdown or commentary.`
+            }
+        ]
+    });
+
+    console.log("[SIMULATION] Retry stop reason:", response.stop_reason);
+    console.log("[SIMULATION] Retry output tokens:", response.usage?.output_tokens);
+
+    await recordUsage(response, "simulation", session);
+
+    rawText = getText(response);
+    generated = parseClaudeJson(rawText);
+
+    console.log("[SIMULATION] JSON retry succeeded.");
 }
 
         const development = {
