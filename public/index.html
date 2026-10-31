@@ -853,7 +853,9 @@ textarea:disabled {
     submitButton.textContent = "Saving…";
    $("decision-input").disabled = true;
     hideNotice();
-    showDecisionStatus("Saving your decision… No AI response is generated during the rounds.");
+    if (currentRound < scenario.rounds.length) {
+   showDecisionStatus("Saving your decision…", "success");
+}
 
     try {
       const result = await api(`/sessions/${encodeURIComponent(sessionId)}/messages`, {
@@ -894,8 +896,15 @@ textarea:disabled {
       const isLastRound = currentRound >= scenario.rounds.length;
       $("continue-button").disabled = isLastRound;
       $("review-button").disabled = !isLastRound;
-      showDecisionStatus("Decision saved successfully. You can now continue to the next round; all four decisions will be reviewed together at the end.", "success");
-    } catch (error) {
+      if (currentRound < scenario.rounds.length) {
+      showDecisionStatus(
+     "Decision saved successfully. You can now continue to the next round; all four decisions will be reviewed together at the end.",
+     "success"
+   );
+     } else {
+     hideNotice();
+  }
+      } catch (error) {
       submitButton.textContent = "Submit decision";
       submitButton.disabled = false;
      $("decision-input").disabled = false;
@@ -923,6 +932,11 @@ textarea:disabled {
     }
 
     renderCurrentRound();
+
+document.getElementById("round-track").scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
   }
 
   async function completeReview() {
