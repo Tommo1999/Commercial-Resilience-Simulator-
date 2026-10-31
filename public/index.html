@@ -923,25 +923,10 @@
     $("review-loading").classList.remove("hidden");
 
     try {
-      let result = await api(`/sessions/${encodeURIComponent(sessionId)}/debrief`, {
+      const result = await api(`/sessions/${encodeURIComponent(sessionId)}/debrief`, {
         method: "POST",
         body: JSON.stringify({})
       });
-
-      // The server starts Claude in the background so Heroku's 30-second
-      // router timeout cannot interrupt the browser request. Poll for the saved result.
-      let attempts = 0;
-      while (!result.debrief && result.status === "generating" && attempts < 120) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        result = await api(`/sessions/${encodeURIComponent(sessionId)}/debrief`);
-        attempts += 1;
-      }
-
-      if (!result.debrief) {
-        throw new Error(result.error || (attempts >= 120
-          ? "The review is taking longer than expected. Please check again shortly."
-          : "The review could not be generated."));
-      }
 
       let review = result.debrief || result.review || result;
       // Some model responses arrive as a JSON-encoded string. Parse them so
