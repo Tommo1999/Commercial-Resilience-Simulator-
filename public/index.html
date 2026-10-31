@@ -199,6 +199,13 @@
       border-color: var(--accent);
     }
 
+textarea:disabled {
+  background: #e9ecea;
+  color: #687780;
+  cursor: not-allowed;
+  opacity: 1;
+}
+
     button {
       border: 0;
       border-radius: 7px;
@@ -461,7 +468,7 @@
       <div class="panel">
         <div class="review-heading-row">
           <h2>Review and coaching</h2>
-          <button id="download-review-button" type="button" class="secondary">Download review as Word document</button>
+          <button id="download-review-button" type="button">Download review as Word document</button>
         </div>
         <div id="review-content"></div>
       </div>
@@ -774,6 +781,7 @@
     );
 
     $("decision-input").value = "";
+    $("decision-input").disabled = false;
     $("continue-button").classList.add("hidden");
     $("review-button").classList.add("hidden");
     $("review-loading").classList.add("hidden");
@@ -843,6 +851,7 @@
     const submitButton = $("submit-decision");
     submitButton.disabled = true;
     submitButton.textContent = "Saving…";
+   $("decision-input").disabled = true;
     hideNotice();
     showDecisionStatus("Saving your decision… No AI response is generated during the rounds.");
 
@@ -889,6 +898,7 @@
     } catch (error) {
       submitButton.textContent = "Submit decision";
       submitButton.disabled = false;
+     $("decision-input").disabled = false;
       const timeoutLike = /timeout|503|failed to fetch|network/i.test(error.message);
       showDecisionStatus(
         timeoutLike
