@@ -933,12 +933,30 @@ textarea:disabled {
     $("review-loading").classList.remove("hidden");
 
     try {
-      const result = await api(`/sessions/${encodeURIComponent(sessionId)}/debrief`, {
-        method: "POST",
-        body: JSON.stringify({})
-      });
+      let result = await api(`/sessions/${encodeURIComponent(sessionId)}/debrief`, {
+  method: "POST",
+  body: JSON.stringify({})
+});
 
-      let review = result.debrief || result.review || result;
+$("review-loading").textContent =
+  "Preparing your after-action review. Please wait...";
+
+while (result.status === "processing" || result.status === "idle") {
+  await new Promise(resolve => setTimeout(resolve, 2500));
+
+  result = await api(
+    `/sessions/${encodeURIComponent(sessionId)}/debrief`,
+    { method: "GET" }
+  );
+}
+
+if (result.status === "failed") {
+  throw new Error(
+    result.error || "Failed to generate the after-action review."
+  );
+}
+
+let review = result.debrief || result.review || result;
       // Some model responses arrive as a JSON-encoded string. Parse them so
       // the review can be displayed as normal page content, not code.
       if (typeof review === "string") {

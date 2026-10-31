@@ -137,8 +137,10 @@ async function saveSession(session) {
                 assumptions: session.assumptions,
                 simulatedEvents: session.simulatedEvents,
                 messages: session.messages,
-                debrief: session.debrief,
-                usage: session.usage,
+               debrief: session.debrief,
+               debriefStatus: session.debriefStatus || "idle",
+               debriefError: session.debriefError || null,
+               usage: session.usage,
                 startedAt: session.startedAt,
                 updatedAt: new Date().toISOString(),
                 completedAt: session.completedAt || null
@@ -335,7 +337,32 @@ router.post("/:sessionId/debrief", async (req, res) => {
                 completedRounds: [...completedRounds].sort((a, b) => a - b)
             });
         }
-        if (session.debrief) return res.json({ sessionId: session.id, debrief: session.debrief });
+        if (session.debrief) {
+    return res.json({
+        sessionId: session.id,
+        status: "completed",
+        debrief: session.debrief
+    });
+}
+
+if (session.debriefStatus === "processing") {
+    return res.status(202).json({
+        sessionId: session.id,
+        status: "processing"
+    });
+}
+
+session.debriefStatus = "processing";
+session.debriefError = null;
+await saveSession(session);
+
+res.status(202).json({
+    sessionId: session.id,
+    status: "processing"
+});
+
+(async () => {
+    try {
 
         const stream = anthropic.messages.stream({
             model: MODEL,
@@ -472,13 +499,33 @@ Return valid JSON only with this shape:
 
         session.status = "completed";
         session.completedAt = new Date().toISOString();
+        session.debriefStatus = "completed";
+        session.debriefError = null;
 
         await saveSession(session);
 
-        return res.json({ sessionId: session.id, debrief: session.debrief });
     } catch (error) {
         console.error("Failed to generate after-action review:", error);
-        return res.status(500).json({ error: "Failed to generate the after-action review." });
+
+        session.debriefStatus = "failed";
+        session.debriefError = "Failed to generate the after-action review.";
+
+        try {
+            await saveSession(session);
+        } catch (saveError) {
+            console.error("Failed to save debrief failure status:", saveError);
+        }
+    }
+    })();
+
+    } catch (error) {
+        console.error("Failed to start after-action review:", error);
+
+        if (!res.headersSent) {
+            return res.status(500).json({
+                error: "Failed to start the after-action review."
+            });
+        }
     }
 });
 
@@ -561,6 +608,46 @@ router.get("/usage", async (req, res) => {
 // Retrieve a session (including after a server restart)
 // GET /api/sessions/:sessionId
 // -----------------------------------------------------------------------------
+
+router.get("/:sessionId/debrief", async (req, res) => {
+    try {
+        const session = await loadSession(req.params.sessionId);
+
+        if (!session) {
+            return res.status(404).json({
+                error: "Session not found."
+            });
+        }
+
+        if (session.debrief) {
+            return res.json({
+                sessionId: session.id,
+                status: "completed",
+                debrief: session.debrief
+            });
+        }
+
+        if (session.debriefStatus === "failed") {
+            return res.status(500).json({
+                sessionId: session.id,
+                status: "failed",
+                error: session.debriefError ||
+                    "Failed to generate the after-action review."
+            });
+        }
+
+        return res.status(202).json({
+            sessionId: session.id,
+            status: session.debriefStatus || "idle"
+        });
+    } catch (error) {
+        console.error("Failed to check debrief status:", error);
+
+        return res.status(500).json({
+            error: "Failed to check the review status."
+        });
+    }
+});
 
 router.get("/:sessionId", async (req, res) => {
     try {
