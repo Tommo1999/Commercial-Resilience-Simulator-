@@ -337,7 +337,7 @@ router.post("/:sessionId/debrief", async (req, res) => {
         }
         if (session.debrief) return res.json({ sessionId: session.id, debrief: session.debrief });
 
-        const response = await anthropic.messages.create({
+        const stream = anthropic.messages.stream({
             model: MODEL,
             max_tokens: 2400,
             output_config: {
@@ -444,8 +444,11 @@ Return valid JSON only with this shape:
                     assumptions: session.assumptions,
                     simulatedEvents: session.simulatedEvents
                 })
-            }]
+           }]
         });
+
+        // Wait for Claude's streamed response to finish.
+        const response = await stream.finalMessage();
 
         await recordUsage(response, "debrief", session);
         const reviewText = getText(response);
