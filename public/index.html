@@ -441,55 +441,93 @@ textarea:disabled {
 
       <div id="round-track" class="round-track"></div>
 
-      <div class="two-column">
-        <div>
-          <div class="panel">
+      
+<div class="two-column">
+    <div>
+        <!-- BOX 1: ROUND INFORMATION -->
+        <div class="panel">
             <span id="round-number" class="pill">Round 1 of 4</span>
             <h2 id="round-title" style="margin-top: 15px;"></h2>
             <p id="round-event"></p>
             <h3>Your task</h3>
             <p id="round-objective"></p>
-          </div>
+        </div>
 
-          <div class="panel">
-            <h2>Your decision</h2>
+        <!-- BOX 2: OPTIONAL HINTS -->
+        <div id="hints-panel" class="panel hidden">
+            <h2>Optional hints</h2>
             <p class="muted">
-              Explain what you would do, what information you need, who you would
-              involve and why. You can acknowledge uncertainty rather than guessing.
+                Reveal a few possible lines of enquiry if you would find them useful.
+                Using hints will not automatically reduce your assessment.
             </p>
-            <div id="hints-panel" class="support-panel hidden">
-              <h3>Optional hints</h3>
-              <p class="muted">Reveal a few possible lines of enquiry if you would find them useful. Using hints will not automatically reduce your assessment.</p>
-              <button id="show-hints-button" type="button">Show hints</button>
-              <div id="hints-content" class="hidden"></div>
+            <button id="show-hints-button" type="button">Show hints</button>
+            <div id="hints-content" class="hidden"></div>
+        </div>
+
+        <!-- BOX 3: AI COACH -->
+        <div id="coaching-panel" class="panel hidden">
+            <h2>Discuss your approach with the AI coach</h2>
+            <p class="muted">
+                Use this space to test your thinking. The coach will ask questions
+                rather than make the decision for you. Submit your final decision
+                separately below.
+            </p>
+
+            <div id="coach-transcript" class="coach-transcript" aria-live="polite"></div>
+
+            <label for="coach-input">Your question or proposed approach</label>
+            <textarea id="coach-input" placeholder="For example: I would contact the suppliers and ask about available capacity..."></textarea>
+
+            <div class="actions">
+                <button id="send-coach-button" type="button">Send to AI coach</button>
             </div>
-            <div id="coaching-panel" class="support-panel hidden">
-              <h3>Discuss your approach with the AI coach</h3>
-              <p class="muted">Use this space to test your thinking. The coach will ask questions rather than make the decision for you. Submit your final decision separately below.</p>
-              <div id="coach-transcript" class="coach-transcript" aria-live="polite"></div>
-              <label for="coach-input">Your question or proposed approach</label>
-              <textarea id="coach-input" placeholder="For example: I would contact the suppliers and ask about available capacity..."></textarea>
-              <div class="actions"><button id="send-coach-button" type="button">Send to AI coach</button></div>
-              <div id="coach-status" class="small muted" role="status" aria-live="polite"></div>
-            </div>
+
+            <div id="coach-status" class="small muted" role="status" aria-live="polite"></div>
+        </div>
+
+        <!-- BOX 4: YOUR RESPONSE -->
+        <div class="panel">
+            <h2>Your response</h2>
+            <p class="muted">
+                Explain what you would do, what information you need, who you would
+                involve and why. You can acknowledge uncertainty rather than guessing.
+            </p>
+
             <label for="decision-input">What is your final response to the situation?</label>
             <textarea id="decision-input" placeholder="Set out your recommended actions, the reasons for them, the information you need and the risks you would monitor..."></textarea>
+
             <div class="actions">
-              <button id="submit-decision" type="button">Submit decision</button>
-              <button id="continue-button" class="hidden" type="button">Continue to next round</button>
-              <button id="review-button" class="hidden" type="button">Generate after-action review</button>
+                <button id="submit-decision" type="button">Submit decision</button>
+                <button id="continue-button" class="hidden" type="button">Continue to next round</button>
+                <button id="review-button" class="hidden" type="button">Generate after-action review</button>
             </div>
+
             <div id="decision-status" class="notice hidden" role="status" aria-live="polite"></div>
+
+            <!-- AFTER-ACTION REVIEW LOADING -->
             <div id="review-loading" class="notice hidden" role="status" aria-live="polite">
-              <p class="review-loading-copy"><strong>Preparing your after-action review</strong></p>
-              <p class="small muted">This can take a little while. Your decisions are being analysed and your review is being generated. Please keep this page open.</p>
-              <div class="review-progress-track" role="progressbar" aria-label="After-action review generation in progress" aria-valuetext="In progress">
-                <div class="review-progress-indicator"></div>
-              </div>
-              <p class="small muted">Time elapsed: <span id="review-elapsed">0:00</span></p>
+                <p class="review-loading-copy">
+                    <strong>Preparing your after-action review</strong>
+                </p>
+                <p class="small muted">
+                    This can take a little while. Your decisions are being analysed
+                    and your review is being generated. Please keep this page open.
+                </p>
+
+                <div class="review-progress-track" role="progressbar"
+                     aria-label="After-action review generation in progress"
+                     aria-valuetext="In progress">
+                    <div class="review-progress-indicator"></div>
+                </div>
+
+                <p class="small muted">
+                    Time elapsed: <span id="review-elapsed">0:00</span>
+                </p>
             </div>
-          </div>
         </div>
+    </div>
+</div>
+
 
         <aside>
           <div class="panel">
