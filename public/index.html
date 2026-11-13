@@ -261,6 +261,31 @@ textarea:disabled {
       border-color: var(--green);
     }
 
+    .review-loading-copy { margin: 0 0 10px; }
+    .review-progress-track {
+      width: 100%;
+      height: 10px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #e3ded4;
+      margin: 12px 0 8px;
+    }
+    .review-progress-indicator {
+      width: 38%;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--accent);
+      animation: review-progress-move 1.5s ease-in-out infinite;
+    }
+    @keyframes review-progress-move {
+      0% { transform: translateX(-110%); }
+      50% { transform: translateX(165%); }
+      100% { transform: translateX(290%); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .review-progress-indicator { animation: none; width: 100%; opacity: .65; }
+    }
+
     .status-list {
       padding-left: 20px;
       margin-bottom: 0;
@@ -455,7 +480,14 @@ textarea:disabled {
               <button id="review-button" class="hidden" type="button">Generate after-action review</button>
             </div>
             <div id="decision-status" class="notice hidden" role="status" aria-live="polite"></div>
-            <div id="review-loading" class="notice hidden" role="status" aria-live="polite">Preparing your after-action review...</div>
+            <div id="review-loading" class="notice hidden" role="status" aria-live="polite">
+              <p class="review-loading-copy"><strong>Preparing your after-action review</strong></p>
+              <p class="small muted">This can take a little while. Your decisions are being analysed and your review is being generated. Please keep this page open.</p>
+              <div class="review-progress-track" role="progressbar" aria-label="After-action review generation in progress" aria-valuetext="In progress">
+                <div class="review-progress-indicator"></div>
+              </div>
+              <p class="small muted">Time elapsed: <span id="review-elapsed">0:00</span></p>
+            </div>
           </div>
         </div>
 
@@ -1056,15 +1088,22 @@ document.getElementById("round-track").scrollIntoView({
     $("review-button").disabled = true;
     hideNotice();
     $("review-loading").classList.remove("hidden");
+    const reviewStartedAt = Date.now();
+    const elapsedElement = $("review-elapsed");
+    const updateReviewElapsed = () => {
+      const elapsedSeconds = Math.floor((Date.now() - reviewStartedAt) / 1000);
+      const minutes = Math.floor(elapsedSeconds / 60);
+      const seconds = String(elapsedSeconds % 60).padStart(2, "0");
+      elapsedElement.textContent = `${minutes}:${seconds}`;
+    };
+    updateReviewElapsed();
+    const reviewTimer = setInterval(updateReviewElapsed, 1000);
 
     try {
       let result = await api(`/sessions/${encodeURIComponent(sessionId)}/debrief`, {
   method: "POST",
   body: JSON.stringify({})
 });
-
-$("review-loading").textContent =
-  "Preparing your after-action review. Please wait...";
 
 while (result.status === "processing" || result.status === "idle") {
   await new Promise(resolve => setTimeout(resolve, 2500));
@@ -1171,6 +1210,7 @@ let review = result.debrief || result.review || result;
       $("review-loading").classList.add("hidden");
       showNotice(`Could not generate the review: ${error.message}`, "error");
     } finally {
+      clearInterval(reviewTimer);
       $("review-loading").classList.add("hidden");
       busy = false;
       $("review-button").disabled = false;
