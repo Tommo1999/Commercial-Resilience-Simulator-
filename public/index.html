@@ -117,6 +117,15 @@
       align-items: start;
     }
 
+/* Keep the Situation Tracker visible while scrolling */
+.two-column aside {
+    position: sticky;
+    top: 20px;
+    align-self: start;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+}
+
     .supplier {
       border: 1px solid var(--line);
       border-radius: 9px;
