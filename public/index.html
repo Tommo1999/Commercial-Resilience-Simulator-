@@ -328,6 +328,17 @@ textarea:disabled {
     .review-heading-row h2 { margin-bottom: 16px; }
     @media (max-width: 600px) { .review-heading-row { align-items: stretch; } .review-heading-row button { width: 100%; } }
 
+
+    .support-panel { margin-bottom: 18px; padding: 16px; border: 1px solid #d9e0e3; border-radius: 10px; background: #f8fafb; }
+    .support-panel h3 { margin-top: 0; }
+    .hint-list { padding-left: 1.25rem; }
+    .hint-list li { margin: .55rem 0; line-height: 1.55; }
+    .coach-transcript { max-height: 260px; overflow-y: auto; display: grid; gap: 10px; margin: 12px 0; }
+    .coach-message { padding: 10px 12px; border-radius: 9px; line-height: 1.5; white-space: pre-wrap; }
+    .coach-message.user { background: #e8eef2; margin-left: 8%; }
+    .coach-message.assistant { background: #fff; border: 1px solid #d9e0e3; margin-right: 8%; }
+    .support-panel textarea { min-height: 75px; }
+
   </style>
 </head>
 <body>
@@ -421,7 +432,22 @@ textarea:disabled {
               Explain what you would do, what information you need, who you would
               involve and why. You can acknowledge uncertainty rather than guessing.
             </p>
-            <label for="decision-input">What is your response to the situation?</label>
+            <div id="hints-panel" class="support-panel hidden">
+              <h3>Optional hints</h3>
+              <p class="muted">Reveal a few possible lines of enquiry if you would find them useful. Using hints will not automatically reduce your assessment.</p>
+              <button id="show-hints-button" class="secondary" type="button">Show hints</button>
+              <div id="hints-content" class="hidden"></div>
+            </div>
+            <div id="coaching-panel" class="support-panel hidden">
+              <h3>Discuss your approach with the AI coach</h3>
+              <p class="muted">Use this space to test your thinking. The coach will ask questions rather than make the decision for you. Submit your final decision separately below.</p>
+              <div id="coach-transcript" class="coach-transcript" aria-live="polite"></div>
+              <label for="coach-input">Your question or proposed approach</label>
+              <textarea id="coach-input" placeholder="For example: I would contact the suppliers and ask about available capacity..."></textarea>
+              <div class="actions"><button id="send-coach-button" type="button">Send to AI coach</button></div>
+              <div id="coach-status" class="small muted" role="status" aria-live="polite"></div>
+            </div>
+            <label for="decision-input">What is your final response to the situation?</label>
             <textarea id="decision-input" placeholder="Set out your recommended actions, the reasons for them, the information you need and the risks you would monitor..."></textarea>
             <div class="actions">
               <button id="submit-decision" type="button">Submit decision</button>
@@ -754,6 +780,87 @@ textarea:disabled {
     });
   }
 
+  function renderSupportFeatures(round) {
+    const settings = sessionData?.featureSettings || {};
+    const hintsEnabled = settings.hintsEnabled === true;
+    const coachingEnabled = settings.aiFeedbackEnabled === true;
+    $("hints-panel").classList.toggle("hidden", !hintsEnabled);
+    $("coaching-panel").classList.toggle("hidden", !coachingEnabled);
+    $("hints-content").classList.add("hidden");
+    $("hints-content").innerHTML = "";
+    $("show-hints-button").disabled = false;
+    $("show-hints-button").textContent = "Show hints";
+    $("coach-input").value = "";
+    $("coach-status").textContent = "";
+    renderCoachTranscript();
+  }
+
+  function renderCoachTranscript() {
+    const transcript = $("coach-transcript");
+    transcript.innerHTML = "";
+    const conversation = sessionData?.coachingConversations?.[String(currentRound)] || [];
+    conversation.forEach(item => {
+      const bubble = document.createElement("div");
+      bubble.className = `coach-message ${item.role === "assistant" ? "assistant" : "user"}`;
+      bubble.textContent = item.content;
+      transcript.appendChild(bubble);
+    });
+    transcript.scrollTop = transcript.scrollHeight;
+  }
+
+  async function revealHints() {
+    if (busy || !sessionId) return;
+    const button = $("show-hints-button");
+    button.disabled = true;
+    button.textContent = "Loading hints…";
+    try {
+      const result = await api(`/sessions/${encodeURIComponent(sessionId)}/hints`, {
+        method: "POST", body: JSON.stringify({ round: currentRound })
+      });
+      const content = $("hints-content");
+      const list = document.createElement("ol");
+      (result.hints || []).forEach(hint => {
+        const item = document.createElement("li");
+        item.textContent = hint;
+        list.appendChild(item);
+      });
+      content.innerHTML = "";
+      content.appendChild(list);
+      content.classList.remove("hidden");
+      button.textContent = "Hints revealed";
+      sessionData.hintsViewed = result.hintsViewed || sessionData.hintsViewed || [];
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = "Show hints";
+      $("coach-status").textContent = error.message;
+    }
+  }
+
+  async function sendCoachMessage() {
+    if (busy || !sessionId) return;
+    const input = $("coach-input");
+    const message = input.value.trim();
+    if (!message) return;
+    busy = true;
+    $("send-coach-button").disabled = true;
+    $("coach-status").textContent = "The coach is considering your response…";
+    try {
+      const result = await api(`/sessions/${encodeURIComponent(sessionId)}/coaching`, {
+        method: "POST", body: JSON.stringify({ message })
+      });
+      sessionData.coachingConversations = sessionData.coachingConversations || {};
+      sessionData.coachingConversations[String(currentRound)] = result.conversation || [];
+      input.value = "";
+      renderCoachTranscript();
+      $("coach-status").textContent = "You can continue the discussion or submit your final decision below.";
+    } catch (error) {
+      $("coach-status").textContent = error.message;
+    } finally {
+      busy = false;
+      $("send-coach-button").disabled = false;
+    }
+  }
+
   function renderCurrentRound() {
     const round = (scenario.rounds || []).find(r => r.number === currentRound);
 
@@ -792,13 +899,14 @@ textarea:disabled {
     $("continue-button").classList.remove("hidden");
     $("review-button").disabled = true;
     $("review-button").classList.add("hidden");
+    renderSupportFeatures(round);
 
     showScreen("simulation-screen");
   }
 
   function renderResponse() {
     // Keep the saved confirmation and the next action together in the decision panel.
-    // No separate development/feedback panel is needed because rounds do not call Claude.
+    // Coaching is optional and separate; the simulator does not generate automatic round developments.
     const isLastRound = currentRound >= scenario.rounds.length;
     // Moving on is only allowed after this round's decision has been saved.
     $("continue-button").classList.toggle("hidden", isLastRound);
@@ -867,7 +975,7 @@ textarea:disabled {
         })
       });
 
-      // The backend saves this decision without making a Claude API call.
+      // Save the participant's final decision separately from hints and coaching.
       const returnedSession = result.session || result;
       if (returnedSession && typeof returnedSession === "object" &&
           (Array.isArray(returnedSession.decisions) || returnedSession.id || returnedSession.currentRound)) {
@@ -891,6 +999,9 @@ textarea:disabled {
 
       renderHistory();
       renderResponse();
+      // Lock the round's optional support tools once its final decision is saved.
+      $("hints-panel").classList.add("hidden");
+      $("coaching-panel").classList.add("hidden");
       submitButton.textContent = "Decision saved";
       submitButton.disabled = true;
       const isLastRound = currentRound >= scenario.rounds.length;
@@ -1155,6 +1266,8 @@ let review = result.debrief || result.review || result;
 
   $("start-button").addEventListener("click", startSimulation);
   $("submit-decision").addEventListener("click", submitDecision);
+  $("show-hints-button").addEventListener("click", revealHints);
+  $("send-coach-button").addEventListener("click", sendCoachMessage);
   $("continue-button").addEventListener("click", continueRound);
   $("review-button").addEventListener("click", completeReview);
   $("download-review-button").addEventListener("click", downloadReviewAsWord);

@@ -137,6 +137,9 @@ async function saveSession(session) {
                 assumptions: session.assumptions,
                 simulatedEvents: session.simulatedEvents,
                 messages: session.messages,
+                hintsViewed: session.hintsViewed || [],
+                coachingConversations: session.coachingConversations || {},
+                featureSettings: session.featureSettings || { hintsEnabled: false, aiFeedbackEnabled: false },
                debrief: session.debrief,
                debriefStatus: session.debriefStatus || "idle",
                debriefError: session.debriefError || null,
@@ -170,6 +173,9 @@ function publicSession(session) {
         assumptions: session.assumptions,
         simulatedEvents: session.simulatedEvents,
         messages: session.messages,
+        hintsViewed: session.hintsViewed || [],
+        coachingConversations: session.coachingConversations || {},
+        featureSettings: session.featureSettings || { hintsEnabled: false, aiFeedbackEnabled: false },
         debrief: session.debrief,
         startedAt: session.startedAt,
         completedAt: session.completedAt || null
@@ -224,6 +230,12 @@ router.post("/", async (req, res) => {
             assumptions: [],
             simulatedEvents: [],
             messages: [],
+            hintsViewed: [],
+            coachingConversations: {},
+            featureSettings: {
+                hintsEnabled: scenario.featureSettings?.hintsEnabled === true,
+                aiFeedbackEnabled: scenario.featureSettings?.aiFeedbackEnabled === true
+            },
             debrief: null,
             usage: {
                 requests: 0,
@@ -244,6 +256,134 @@ router.post("/", async (req, res) => {
     } catch (error) {
         console.error("Failed to create simulation session:", error);
         return res.status(500).json({ error: "Failed to create simulation session." });
+    }
+});
+
+// -----------------------------------------------------------------------------
+// Record that the participant revealed the optional hints for a round.
+// POST /api/sessions/:sessionId/hints { round: 1 }
+// -----------------------------------------------------------------------------
+router.post("/:sessionId/hints", async (req, res) => {
+    try {
+        const session = await loadSession(req.params.sessionId);
+        if (!session) return res.status(404).json({ error: "Session not found." });
+        if (session.status !== "active") return res.status(400).json({ error: "This simulation is no longer active." });
+        if (!session.featureSettings?.hintsEnabled) return res.status(403).json({ error: "Hints are disabled for this scenario." });
+        const round = Number(req.body.round || session.currentRound);
+        if (round !== Number(session.currentRound)) return res.status(400).json({ error: "Hints can only be revealed for the current round." });
+        session.hintsViewed = session.hintsViewed || [];
+        if (!session.hintsViewed.some(item => Number(item.round) === round)) {
+            session.hintsViewed.push({ round, timestamp: new Date().toISOString() });
+            await saveSession(session);
+        }
+        const config = session.scenario.rounds.find(item => Number(item.number) === round);
+        return res.json({ hints: config?.hints || [], hintsViewed: session.hintsViewed });
+    } catch (error) {
+        console.error("Failed to reveal hints:", error);
+        return res.status(500).json({ error: "Could not load hints." });
+    }
+});
+
+// -----------------------------------------------------------------------------
+// Conversational coaching for the participant's current round.
+// POST /api/sessions/:sessionId/coaching { message: "..." }
+// -----------------------------------------------------------------------------
+router.post("/:sessionId/coaching", async (req, res) => {
+    try {
+        const session = await loadSession(req.params.sessionId);
+        if (!session) return res.status(404).json({ error: "Session not found." });
+        if (session.status !== "active") return res.status(400).json({ error: "This simulation is no longer active." });
+        if (!session.featureSettings?.aiFeedbackEnabled) return res.status(403).json({ error: "AI coaching is disabled for this scenario." });
+        const message = typeof req.body.message === "string" ? req.body.message.trim() : "";
+        if (!message) return res.status(400).json({ error: "Please enter a message." });
+        if (message.length > 3000) return res.status(400).json({ error: "Please keep each coaching message under 3,000 characters." });
+        const round = Number(session.currentRound);
+        const roundConfig = session.scenario.rounds.find(item => Number(item.number) === round);
+        if (!roundConfig) return res.status(400).json({ error: "Current round configuration is missing." });
+        session.coachingConversations = session.coachingConversations || {};
+        const history = session.coachingConversations[String(round)] || [];
+        if (history.length >= 20) return res.status(429).json({ error: "This round has reached the coaching message limit." });
+        const messages = [...history.map(item => ({ role: item.role, content: item.content })), { role: "user", content: message }];
+        const response = await anthropic.messages.create({
+            model: MODEL,
+            max_tokens: 500,
+            system: `You are a thoughtful procurement and supply-chain resilience coach supporting a participant in a fictional training simulation. Use British English. The current round is ${round}: ${roundConfig.title}. Event: ${roundConfig.event}. Objective: ${roundConfig.objective}. Ask one concise, useful probing question or offer a brief reflection that helps the participant think more deeply. Do not make the decision for them, provide a complete model answer, invent facts, or introduce information not contained in the scenario. Encourage evidence gathering, clear assumptions, stakeholders, trade-offs and practical next steps. Keep the conversation supportive and realistic. If they appear ready, encourage them to write their own final decision in the separate decision box.`,
+            messages
+        });
+        const reply = getText(response);
+        await recordUsage(response, "coaching", session);
+        const timestamp = new Date().toISOString();
+        history.push({ role: "user", content: message, timestamp }, { role: "assistant", content: reply, timestamp });
+        session.coachingConversations[String(round)] = history;
+        await saveSession(session);
+        return res.json({ round, conversation: history, reply });
+    } catch (error) {
+        console.error("AI coaching failed:", error);
+        return res.status(500).json({ error: "AI coaching is temporarily unavailable. You can still submit your decision." });
+    }
+});
+
+// -----------------------------------------------------------------------------
+// Record that the participant revealed the optional hints for a round.
+// POST /api/sessions/:sessionId/hints { round: 1 }
+// -----------------------------------------------------------------------------
+router.post("/:sessionId/hints", async (req, res) => {
+    try {
+        const session = await loadSession(req.params.sessionId);
+        if (!session) return res.status(404).json({ error: "Session not found." });
+        if (session.status !== "active") return res.status(400).json({ error: "This simulation is no longer active." });
+        if (!session.featureSettings?.hintsEnabled) return res.status(403).json({ error: "Hints are disabled for this scenario." });
+        const round = Number(req.body.round || session.currentRound);
+        if (round !== Number(session.currentRound)) return res.status(400).json({ error: "Hints can only be revealed for the current round." });
+        session.hintsViewed = session.hintsViewed || [];
+        if (!session.hintsViewed.some(item => Number(item.round) === round)) {
+            session.hintsViewed.push({ round, timestamp: new Date().toISOString() });
+            await saveSession(session);
+        }
+        const config = session.scenario.rounds.find(item => Number(item.number) === round);
+        return res.json({ hints: config?.hints || [], hintsViewed: session.hintsViewed });
+    } catch (error) {
+        console.error("Failed to reveal hints:", error);
+        return res.status(500).json({ error: "Could not load hints." });
+    }
+});
+
+// -----------------------------------------------------------------------------
+// Conversational coaching for the participant's current round.
+// POST /api/sessions/:sessionId/coaching { message: "..." }
+// -----------------------------------------------------------------------------
+router.post("/:sessionId/coaching", async (req, res) => {
+    try {
+        const session = await loadSession(req.params.sessionId);
+        if (!session) return res.status(404).json({ error: "Session not found." });
+        if (session.status !== "active") return res.status(400).json({ error: "This simulation is no longer active." });
+        if (!session.featureSettings?.aiFeedbackEnabled) return res.status(403).json({ error: "AI coaching is disabled for this scenario." });
+        const message = typeof req.body.message === "string" ? req.body.message.trim() : "";
+        if (!message) return res.status(400).json({ error: "Please enter a message." });
+        if (message.length > 3000) return res.status(400).json({ error: "Please keep each coaching message under 3,000 characters." });
+        const round = Number(session.currentRound);
+        const roundConfig = session.scenario.rounds.find(item => Number(item.number) === round);
+        if (!roundConfig) return res.status(400).json({ error: "Current round configuration is missing." });
+        session.coachingConversations = session.coachingConversations || {};
+        const history = session.coachingConversations[String(round)] || [];
+        if (history.length >= 20) return res.status(429).json({ error: "This round has reached the coaching message limit." });
+        const messages = [...history.map(item => ({ role: item.role, content: item.content })), { role: "user", content: message }];
+        const response = await anthropic.messages.create({
+            model: MODEL,
+            max_tokens: 500,
+            system: `You are a thoughtful procurement and supply-chain resilience coach supporting a participant in a fictional training simulation. Use British English. The current round is ${round}: ${roundConfig.title}. Event: ${roundConfig.event}. Objective: ${roundConfig.objective}. Ask one concise, useful probing question or offer a brief reflection that helps the participant think more deeply. Do not make the decision for them, provide a complete model answer, invent facts, or introduce information not contained in the scenario. Encourage evidence gathering, clear assumptions, stakeholders, trade-offs and practical next steps. Keep the conversation supportive and realistic. If they appear ready, encourage them to write their own final decision in the separate decision box.`,
+            messages
+        });
+        const reply = getText(response);
+        await recordUsage(response, "coaching", session);
+        const timestamp = new Date().toISOString();
+        history.push({ role: "user", content: message, timestamp }, { role: "assistant", content: reply, timestamp });
+        session.coachingConversations[String(round)] = history;
+        await saveSession(session);
+        return res.json({ round, conversation: history, reply });
+    } catch (error) {
+        console.error("AI coaching failed:", error);
+        return res.status(500).json({ error: "AI coaching is temporarily unavailable. You can still submit your decision." });
     }
 });
 
@@ -425,7 +565,9 @@ SCENARIO ACCURACY — IMPORTANT:
 - Treat the supplied original scenario and briefing details as authoritative.
 - Do not invent company, supplier, customer, product, order, contract, deadline or quantity details.
 - Do not invent consequences or events: this simulation records decisions only and does not generate live AI developments during the rounds.
-- Base each round review on the participant's actual saved decision and the round objective/event supplied in the scenario.
+- Base each round review on the participant's actual saved final decision and the round objective/event supplied in the scenario.
+- Coaching conversations and hints are learning support, not final decisions. Use them only to understand how the participant developed their thinking.
+- Do not penalise a participant merely for viewing hints or asking for coaching. Comment constructively on whether they applied, questioned or independently developed the support.
 - Clearly distinguish original scenario facts from participant assumptions and information gaps.
 - If a detail cannot be verified from the supplied scenario, identify it as something to check rather than an established fact.
 - Review all four rounds together and explain how the participant's approach develops across them.
@@ -465,6 +607,9 @@ Return valid JSON only with this shape:
                         rounds: session.scenario.rounds
                     },
                     decisions: decisions.sort((a, b) => Number(a.round) - Number(b.round)),
+                    hintsViewed: session.hintsViewed || [],
+                    coachingConversations: session.coachingConversations || {},
+                    featureSettings: session.featureSettings || {},
                     reviewGuidance: "Review the four saved participant decisions as one complete exercise. No AI-generated round developments exist; do not imply that consequences were simulated or observed.",
                     initialState: session.state,
                     facts: session.facts,
